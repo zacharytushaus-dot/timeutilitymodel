@@ -1,0 +1,16 @@
+# Ignore large database files
+*.db
+*.sqlite
+tum.db
+
+# Ignore Python environment and cache
+.venv/
+__pycache__/
+
+# CRITICAL: Protect your secrets
+.streamlit/secrets.toml
+.streamlit/config.toml
+.env
+
+# Ignore system files
+.DS_Store

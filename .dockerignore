@@ -1,0 +1,15 @@
+# Ignore Git files
+.git
+.gitignore
+
+# Ignore Python cache and virtual env
+__pycache__
+.venv/
+.env
+
+# CRITICAL: Do not upload secrets or local config
+.streamlit/secrets.toml
+
+# Ignore local SQLite databases (you use Supabase now)
+*.db
+*.sqlite

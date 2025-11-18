@@ -1,0 +1,10 @@
+streamlit>=1.36
+pandas>=2.2
+numpy>=1.26
+plotly>=5.22
+SQLAlchemy>=2.0
+pydantic>=2.0
+psycopg[binary]>=3.1
+supabase>=2.6
+alembic>=1.13
+python-dotenv>=1.0
