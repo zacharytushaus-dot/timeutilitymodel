@@ -872,9 +872,25 @@ else:
             if a.ndim == 2 and a.shape[0] > MAX_DRAWS:
                 idx = np.linspace(0, a.shape[0] - 1, MAX_DRAWS).astype(int)
                 return a[idx]
+            # Also thin 1D arrays (like projected_life) to match!
+            if a.ndim == 1 and a.size > MAX_DRAWS:
+                idx = np.linspace(0, a.size - 1, MAX_DRAWS).astype(int)
+                return a[idx]
             return a
-
-        for name in ["balance_path", "balance_no_tech_path", "bio_age", "tech_years_by_age", "tech_costs_by_age"]:
+        
+        # UPDATED LIST: Includes 'projected_life' and 'projected_life_frac'
+        keys_to_thin = [
+            "balance_path", 
+            "balance_no_tech_path", 
+            "bio_age", 
+            "tech_years_by_age", 
+            "tech_costs_by_age", 
+            "projected_life_mc",
+            "projected_life",
+            "projected_life_frac"
+        ]
+        
+        for name in keys_to_thin:
             if name in payload:
                 payload[name] = _thin_2d(payload[name])
 
