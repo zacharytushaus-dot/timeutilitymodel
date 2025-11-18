@@ -865,7 +865,7 @@ else:
                 payload[name] = out[name]
 
         # Thin very large 2D arrays so saving to JSON stays reasonable
-        MAX_DRAWS = 50000
+        MAX_DRAWS = 2000
 
         def _thin_2d(a):
             a = np.asarray(a)
