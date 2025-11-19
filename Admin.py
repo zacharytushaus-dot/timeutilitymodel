@@ -878,7 +878,7 @@ else:
                 return a[idx]
             return a
         
-        # UPDATED LIST: Includes 'projected_life' and 'projected_life_frac'
+        # UPDATED LIST: Added "net_worth" to ensure x and y axes match
         keys_to_thin = [
             "balance_path", 
             "balance_no_tech_path", 
@@ -887,7 +887,8 @@ else:
             "tech_costs_by_age", 
             "projected_life_mc",
             "projected_life",
-            "projected_life_frac"
+            "projected_life_frac",
+            "net_worth"  # <--- NEW: MUST BE HERE
         ]
         
         for name in keys_to_thin:
