@@ -819,6 +819,7 @@ if st.sidebar.button("Run Simulation", type="primary", use_container_width=True)
         grid_max_age=max(int(age) + 126, 170),
         seed=int(seed),
     )
+    st.session_state.last_inputs = inputs
     st.session_state.results = run_monte_carlo(inputs)
 
 # ------------------ Render results (if any) ------------------
@@ -840,66 +841,78 @@ else:
         med_net = float(np.median(out["net_worth"]))
         return {"median_life": med_life, "range_90": [float(p5), float(p95)], "median_net_mm": med_net}
 
-    def _fig_payload(out) -> dict:
-        """
-        Trim the big simulation result to only what the client page needs.
-        Keeps names stable and converts numpy to JSON-safe types.
-        Also thins very large (D,T) arrays so snapshots don't balloon.
-        """
-        import numpy as np
+    def _fig_payload(inp: Inputs, out: dict) -> dict:
+        # 1. Standard payload creation
+        payload = {k: v.tolist() if isinstance(v, np.ndarray) else v 
+                    for k, v in out.items() if k not in ["threshold_series"]}
 
-        wanted = [
-            # axes + life
-            "chrono_age", "projected_life", "projected_life_frac", "projected_life_mc",
-            # wealth + cashflows
-            "net_worth", "balance_path", "balance_no_tech_path",
-            "discretionary_income_by_year", "health_spend_by_year", "contrib_by_year",
-            # survival + tech
-            "yrs_added_interventions", "threshold_series", "le_threshold_series",
-            "bio_age", "tech_years_by_age", "tech_costs_by_age",
-        ]
-
-        payload = {}
-        for name in wanted:
-            if name in out:
-                payload[name] = out[name]
-
-        # Thin very large 2D arrays so saving to JSON stays reasonable
+        # 2. Thinning logic (Optimization we added earlier)
         MAX_DRAWS = 2000
-
         def _thin_2d(a):
             a = np.asarray(a)
             if a.ndim == 2 and a.shape[0] > MAX_DRAWS:
                 idx = np.linspace(0, a.shape[0] - 1, MAX_DRAWS).astype(int)
                 return a[idx]
-            # Also thin 1D arrays (like projected_life) to match!
             if a.ndim == 1 and a.size > MAX_DRAWS:
-                idx = np.linspace(0, a.size - 1, MAX_DRAWS).astype(int)
-                return a[idx]
+                    idx = np.linspace(0, a.size - 1, MAX_DRAWS).astype(int)
+                    return a[idx]
             return a
-        
-        # UPDATED LIST: Added "net_worth" to ensure x and y axes match
+
         keys_to_thin = [
-            "balance_path", 
-            "balance_no_tech_path", 
-            "bio_age", 
-            "tech_years_by_age", 
-            "tech_costs_by_age", 
-            "projected_life_mc",
-            "projected_life",
-            "projected_life_frac",
-            "net_worth"  # <--- NEW: MUST BE HERE
+            "balance_path", "balance_no_tech_path", "bio_age", 
+            "tech_years_by_age", "tech_costs_by_age", "projected_life_mc",
+            "projected_life", "projected_life_frac", "net_worth"
         ]
-        
+
         for name in keys_to_thin:
             if name in payload:
                 payload[name] = _thin_2d(payload[name])
 
-        # Prefer the canonical 1-D threshold series key if both exist
-        if "threshold_series" not in payload and "le_threshold_series" in payload:
-            payload["threshold_series"] = payload.pop("le_threshold_series")
+        # 3. NEW: Pre-calculate Impact Analysis for the Client
+        # This allows the client to see the Forest Plot without running sims
+        try:
+            impact_rows = []
+            # Helper to rebuild Inputs for counterfactuals
+            def _inputs_with(lhr: dict) -> Inputs:
+                # Create a copy of inputs but with specific HRs
+                # We use the 'inp' passed to this function
+                new_inp = Inputs(**{k: v for k, v in inp.__dict__.items() if k != "lifestyle_HRs"})
+                new_inp.lifestyle_HRs = lhr
+                new_inp.draws = int(min(inp.draws, 4000)) # Keep it fast
+                return new_inp
 
-        return _to_jsonable(payload)
+            baseline_median = float(np.median(out["projected_life"]))
+            
+            # Label map (Approximate mapping if CANON isn't global, adjust as needed)
+            # We use the keys directly or a simple map
+            for key, hr_now in inp.lifestyle_HRs.items():
+                if not inp.intervention_on.get(key, False):
+                    continue
+                if abs(float(hr_now) - 1.0) < 1e-9:
+                    continue
+
+                lhr2 = dict(inp.lifestyle_HRs)
+                lhr2[key] = 1.0 # Neutralize
+
+                # Run mini-sim
+                out_i = run_monte_carlo(_inputs_with(lhr2))
+                med_i = float(np.median(out_i["projected_life"]))
+                
+                # Calculate impact (Positive = Years Gained)
+                effect = baseline_median - med_i
+                
+                impact_rows.append({
+                    "Factor": key.replace("mediterraneandiet", "Mediterranean Diet").title(),
+                    "HR": float(hr_now),
+                    "Delta": effect
+                })
+            
+            payload["impact_analysis"] = impact_rows
+            
+        except Exception as e:
+            print(f"Warning: Could not save impact analysis: {e}")
+
+        return payload
 
     # =================== Client (Operator snapshot controls) ===================
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
@@ -925,6 +938,14 @@ else:
         new_email = c2.text_input("Client email (optional)")
 
     if st.button("Save run for client", type="secondary"):
+        # --- NEW: RETRIEVE THE INPUTS ---
+        inp = st.session_state.get("last_inputs")
+        
+        if inp is None:
+            st.error("Please click 'Run Simulation' again to refresh the data before saving.")
+            st.stop()
+        # --------------------------------
+
         # 1) resolve/create client inside the button block
         if pick == "+ New client":
             if not new_name:
@@ -954,21 +975,23 @@ else:
         # 3) Outputs payload
         outputs_json = RunOutputs(
             summary=_summarize_for_save(out, age),
-            figs_data=_fig_payload(out)
+            # --- UPDATED CALL: Pass the retrieved 'inp' ---
+            figs_data = _fig_payload(inp, out) 
+            # ----------------------------------------------
         )
         outputs_json = _to_jsonable(outputs_json.model_dump() if hasattr(outputs_json, "model_dump") else outputs_json.dict())
 
         # 4) Save snapshot with org + operator
         r = Run(
             org_id=org_id,
-            operator_id=user_id,     # ← match storage.py column name
+            operator_id=user_id,
             client_id=client.id,
             inputs=inputs_json,
             outputs=outputs_json,
         )
         sess.add(r); sess.commit()
 
-        # 5) Signed link (label-based, survives file renames)
+        # 5) Signed link
         link = _client_link_for(r.id)
 
         st.success("Saved snapshot.")

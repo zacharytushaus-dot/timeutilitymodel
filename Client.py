@@ -260,6 +260,60 @@ with col_l:
 with col_r:
     st.plotly_chart(fig_nw, use_container_width=True)
 
+# ---------- Impact Analysis (Forest Plot) ----------
+impact_data = out.get("impact_analysis")
+
+if impact_data and len(impact_data) > 0:
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+    
+    # We use an expander, but default it to OPEN so they see it
+    with st.expander("Impact Analysis (Forest Plot)", expanded=True):
+        st.caption("How your specific habits contribute to your projected lifespan. "
+                   "Green (Left) = Adds years. Red (Right) = Removes years.")
+        
+        df_imp = pd.DataFrame(impact_data)
+        
+        # Sort and Color logic
+        df_imp = df_imp.sort_values("HR", ascending=False)
+        df_imp["Color"] = df_imp["HR"].apply(lambda x: "#ff4b4b" if x > 1 else "#09ab3b")
+        
+        fig_forest = go.Figure()
+
+        # Center Line
+        fig_forest.add_vline(x=1, line_width=2, line_dash="dash", line_color="#555")
+
+        # Dots
+        fig_forest.add_trace(go.Scatter(
+            x=df_imp["HR"],
+            y=df_imp["Factor"],
+            mode='markers',
+            marker=dict(
+                color=df_imp["Color"],
+                size=12,
+                line=dict(width=2, color="#333")
+            ),
+            # Tooltip
+            text=[f"HR: {r['HR']:.2f}<br>Impact: {r['Delta']:+.1f} years" for i, r in df_imp.iterrows()],
+            hoverinfo="text+y",
+        ))
+
+        # Layout
+        fig_forest.update_layout(
+            title="",
+            xaxis=dict(
+                title="Hazard Ratio (Log Scale)",
+                type="log",
+                tickvals=[0.5, 0.75, 1.0, 1.5, 2.0, 3.0],
+                ticktext=["0.5x", "0.75x", "1.0x", "1.5x", "2.0x", "3.0x"],
+                range=[np.log10(0.4), np.log10(3.5)]
+            ),
+            yaxis=dict(title="", type="category", tickfont=dict(size=14)),
+            height=max(250, 80 + (len(df_imp) * 40)),
+            margin=dict(l=0, r=0, t=10, b=40),
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig_forest, use_container_width=True)
 
 # ---------- Years-added area ----------
 st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
