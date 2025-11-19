@@ -1190,9 +1190,10 @@ with c3:
 # ---------- Impact analysis (local counterfactual) ----------
 st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
 
-with st.expander("What helped or hurt most?", expanded=False):
-    st.caption("We re-run your profile once per factor, setting that factor to **baseline (risk ×1.00)**, and report how your " \
-    "**median lifespan** would change. “Risk ×1.10” means 10% higher yearly death risk; “×0.90” means 10% lower.")
+with st.expander("Impact Analysis (Forest Plot)", expanded=False):
+    st.caption("We re-run your profile once per factor, setting that factor to **baseline (risk ×1.00)**. "
+               "The plot below shows the 'Hazard Ratio' (HR) for each active habit. "
+               "Left (Green) = Reduces risk. Right (Red) = Increases risk.")
 
     # Keep runs fast but stable
     draws_impact = int(min(draws, 4000))  # smaller than main run, same seed for low noise
@@ -1239,48 +1240,72 @@ with st.expander("What helped or hurt most?", expanded=False):
         lhr2[key] = 1.0  # neutralize this factor only
 
         out_i = run_monte_carlo(_inputs_with(lhr2))
+        # We keep the median logic just in case you want to display "Years Gained" on hover later
         med_i = float(np.median(out_i["projected_life"]))
-
-        # Effect if we removed the factor: positive = it’s hurting you now; negative = it’s helping you now.
         effect = med_i - median_life
 
         rows.append({
             "Factor": LABEL_FOR.get(key, key).replace("Weight status", "BMI"),
             "Risk ×": f"×{float(hr_now):.2f}",
-            "Δ Median years if removed": effect
+            "HR": float(hr_now),
+            "Δ Median": effect
         })
 
     if not rows:
         st.info("No active factors to analyze yet")
     else:
         df_imp = pd.DataFrame(rows)
+        
+        # Sort by Hazard Ratio (Harmful on top, Helpful on bottom)
+        df_imp = df_imp.sort_values("HR", ascending=False)
+        
+        # Color logic: Red if HR > 1 (Harmful), Green if HR < 1 (Beneficial)
+        df_imp["Color"] = df_imp["HR"].apply(lambda x: "#ff4b4b" if x > 1 else "#09ab3b")
+        
+        # Create the Forest Plot
+        fig_forest = go.Figure()
 
-        # Rank lists
-        bad  = df_imp.sort_values("Δ Median years if removed", ascending=False).head(5)
-        good = df_imp.sort_values("Δ Median years if removed", ascending=True).head(5)
+        # 1. Add the Center Line (HR = 1.0 means Neutral)
+        fig_forest.add_vline(x=1, line_width=2, line_dash="dash", line_color="#555")
 
-        # Drop the pandas row index so the leftmost 0–4 vanishes
-        bad  = bad.reset_index(drop=True)
-        good = good.reset_index(drop=True)
+        # 2. Add the dots
+        fig_forest.add_trace(go.Scatter(
+            x=df_imp["HR"],
+            y=df_imp["Factor"],
+            mode='markers',
+            marker=dict(
+                color=df_imp["Color"],
+                size=12,
+                line=dict(width=2, color="#333")
+            ),
+            # Custom Hover text to show the HR and the Years impact
+            text=[f"HR: {r['HR']:.2f}<br>Years Impact: {r['Δ Median']:+.1f} yrs" for i, r in df_imp.iterrows()],
+            hoverinfo="text+y",
+            name="Hazard Ratio"
+        ))
 
-        # Lock the visible column order (optional but nice)
-        cols = ["Factor", "Risk ×", "Δ Median years if removed"]
+        # 3. Medical Journal Formatting
+        fig_forest.update_layout(
+            title="Risk Factor Impact (Hazard Ratios)",
+            xaxis=dict(
+                title="Hazard Ratio (Log Scale)",
+                type="log",  # <--- THE KEY UPGRADE: Logarithmic scale
+                tickvals=[0.5, 0.75, 1.0, 1.5, 2.0, 3.0],
+                ticktext=["0.5x", "0.75x", "1.0x (Neutral)", "1.5x", "2.0x", "3.0x"],
+                # Fix range to keep 1.0 centered-ish: log(0.4) to log(3.0) cover most ranges
+                range=[np.log10(0.4), np.log10(3.5)] 
+            ),
+            yaxis=dict(
+                title="",
+                tickfont=dict(size=14),
+                type="category" # Ensures order respects the dataframe sort
+            ),
+            height=max(300, 100 + (len(df_imp) * 40)), # Dynamic height
+            margin=dict(l=0, r=0, t=40, b=40),
+            showlegend=False
+        )
 
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**Biggest drag right now**")
-            st.dataframe(
-                bad[cols],
-                use_container_width=True,
-                hide_index=True
-            )
-        with c2:
-            st.markdown("**Biggest boost right now**")
-            st.dataframe(
-                good[cols],
-                use_container_width=True,
-                hide_index=True
-            )
+        st.plotly_chart(fig_forest, use_container_width=True)
     
 # ================== Lifespan + Wealth controls (row 1) ==================
 st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
