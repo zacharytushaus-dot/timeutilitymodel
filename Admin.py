@@ -1191,9 +1191,8 @@ with c3:
 st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
 
 with st.expander("Impact Analysis (Forest Plot)", expanded=False):
-    st.caption("We re-run your profile once per factor, setting that factor to **baseline (risk ×1.00)**. "
-               "The plot below shows the 'Hazard Ratio' (HR) for each active habit. "
-               "Left (Green) = Reduces risk. Right (Red) = Increases risk.")
+    st.caption("We re-run your profile setting each factor to **baseline (risk ×1.00)** to measure its specific contribution. "
+               "The plot below shows the 'Hazard Ratio' (HR) and the total years added/lost by that specific habit.")
 
     # Keep runs fast but stable
     draws_impact = int(min(draws, 4000))  # smaller than main run, same seed for low noise
@@ -1240,9 +1239,12 @@ with st.expander("Impact Analysis (Forest Plot)", expanded=False):
         lhr2[key] = 1.0  # neutralize this factor only
 
         out_i = run_monte_carlo(_inputs_with(lhr2))
-        # We keep the median logic just in case you want to display "Years Gained" on hover later
         med_i = float(np.median(out_i["projected_life"]))
-        effect = med_i - median_life
+
+        # --- FIX: FLIPPED SUBTRACTION ORDER ---
+        # Old: med_i - median_life (Change if removed)
+        # New: median_life - med_i (Years attributed to this habit)
+        effect = median_life - med_i
 
         rows.append({
             "Factor": LABEL_FOR.get(key, key).replace("Weight status", "BMI"),
@@ -1278,8 +1280,8 @@ with st.expander("Impact Analysis (Forest Plot)", expanded=False):
                 size=12,
                 line=dict(width=2, color="#333")
             ),
-            # Custom Hover text to show the HR and the Years impact
-            text=[f"HR: {r['HR']:.2f}<br>Years Impact: {r['Δ Median']:+.1f} yrs" for i, r in df_imp.iterrows()],
+            # Custom Hover text: Now shows signs correctly (+ for gain, - for loss)
+            text=[f"HR: {r['HR']:.2f}<br>Impact: {r['Δ Median']:+.1f} years" for i, r in df_imp.iterrows()],
             hoverinfo="text+y",
             name="Hazard Ratio"
         ))
@@ -1289,18 +1291,17 @@ with st.expander("Impact Analysis (Forest Plot)", expanded=False):
             title="Risk Factor Impact (Hazard Ratios)",
             xaxis=dict(
                 title="Hazard Ratio (Log Scale)",
-                type="log",  # <--- THE KEY UPGRADE: Logarithmic scale
+                type="log",  # Keeps visual symmetry for multipliers
                 tickvals=[0.5, 0.75, 1.0, 1.5, 2.0, 3.0],
                 ticktext=["0.5x", "0.75x", "1.0x (Neutral)", "1.5x", "2.0x", "3.0x"],
-                # Fix range to keep 1.0 centered-ish: log(0.4) to log(3.0) cover most ranges
                 range=[np.log10(0.4), np.log10(3.5)] 
             ),
             yaxis=dict(
                 title="",
                 tickfont=dict(size=14),
-                type="category" # Ensures order respects the dataframe sort
+                type="category"
             ),
-            height=max(300, 100 + (len(df_imp) * 40)), # Dynamic height
+            height=max(300, 100 + (len(df_imp) * 40)), 
             margin=dict(l=0, r=0, t=40, b=40),
             showlegend=False
         )
