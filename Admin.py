@@ -370,13 +370,13 @@ def sign_out():
 
 st.caption(f"Signed in as: {st.session_state['user']['email']}")
 
-st.sidebar.header("1) Your Demographics")
+st.sidebar.subheader("Demographics")
 
 age = st.sidebar.number_input("Age", min_value=18, max_value=95, value=21, step=1)
 sex = st.sidebar.selectbox("Sex", ["Male", "Female"])
 
 # --- Weight status (forced exact BMI via height & weight) ---
-st.sidebar.subheader("Body Mass Index")
+st.sidebar.subheader("Body Mass")
 
 # Units radio; hide its label to avoid clutter
 unit = st.sidebar.radio(
@@ -460,200 +460,272 @@ PRESET_TOGGLES = {
     "Bad Idea Mode":      {"Consistent Sleep": False,  "Frequent Exercise": False,  "Mediterranean Diet": False,  "Meditation": False,  "Red-Light Therapy": False, "Frequent Sauna": False, "Heavy Smoking": True, "Heavy Drinking": True}
 }
 
-# ---------------- 2) Your Health Habits ----------------
-st.sidebar.header("2) Your Health Habits")
+# -------------------------------------------------------------
+# 2) THE 5-BUCKET SYSTEM (Updated Logic)
+# -------------------------------------------------------------
+st.sidebar.subheader("Model Configuration")
 
-# Hazard scaling type (applies to all habits)
-scale_choice = st.sidebar.selectbox(
-    "Risk Scaling Method",
-    ["Log (recommended)", "Linear"],
-    index=0,
-    key="hazard_scale_mode",
-    help="Chooses how health effects scale. Logarithmic compounds over time; Linear applies flat, partial-credit changes"
-)
-scaling_mode = "log" if "log" in scale_choice.lower() else "linear"
-benefit_curvature = 1.0  # fixed; not exposed
+# Expanded Theory List with Max Hazard Ratios
+# For Beneficial (HR < 1): Lower is better.
+# For Harmful (HR > 1): Higher is worse.
+BASE_RISK_MULT = {
+    # Hemodynamic
+    "Frequent Exercise": 0.68,   # Zone 2/5
+    "Daily Movement":    0.72,   # Steps
+    "Frequent Sauna":    0.77,   # Heat stress
 
-def _apply_preset():
-    p = st.session_state["preset"]  # new preset value
+    # Metabolic
+    "Caloric Restriction": 0.75, # Fasting
+    "Mediterranean Diet": 0.77,  # Quality Fuel
+    "Low Sugar / Fiber":  0.85,  # Baseline Diet
 
-    # Helpful: set each checkbox and seed its adherence slider (percent units)
-    for name in BENEFICIAL:
-        key = CANON[name]  # e.g., "sleep", "exercise"
-        on = bool(PRESET_TOGGLES[p].get(name, False))
-        st.session_state[f"help_{key}_on"] = on
-        # seed per-habit slider to 75% (or keep last if you prefer)
-        st.session_state[f"help_{key}_adh"] = 75.0 if on else 0.0
+    # Restorative
+    "Consistent Sleep":   0.88,
+    "Meditation":         0.93,
 
-    # Harmful: set toggles and exposures (sliders expect % values)
-    st.session_state["smoke_on"] = bool(PRESET_TOGGLES[p].get("Heavy Smoking", False))
-    st.session_state["drink_on"] = bool(PRESET_TOGGLES[p].get("Heavy Drinking", False))
-    st.session_state["smoke_exposure"] = 100.0 if st.session_state["smoke_on"] else 0.0
-    st.session_state["drink_exposure"] = 100.0 if st.session_state["drink_on"] else 0.0
+    # Cellular
+    "Cold Plunge":        0.96,
+    "Red-Light Therapy":  0.98,
+    "Supplements":        0.95,
 
-    # Clear previous results so “Run Simulation” isn’t using stale outputs
-    st.session_state.results = None
-
-preset = st.sidebar.selectbox(
-    "Preset Habits",
-    ["None", "Core Routine", "Active Routine", "Longevity Protocol", "Bad Idea Mode"],
-    index=0,
-    key="preset",
-    help="Optional: choose a plan to auto-fill your health habits below. You can edit them after",
-    on_change=_apply_preset
-)
-
-# Split habits by effect
-BENEFICIAL = [n for n, hr in BASE_RISK_MULT.items() if hr < 1.0]
-HARMFUL    = [n for n, hr in BASE_RISK_MULT.items() if hr > 1.0]
-
-toggles = {}
-
-# ---- Helpful habits ----
-st.sidebar.subheader("Helpful habits")
-
-def helpful_block(label: str, key_prefix: str, default_on: bool):
-    """Checkbox on one line; if enabled, show adherence slider directly below (percent)."""
-    on = st.sidebar.checkbox(label, value=default_on, key=f"{key_prefix}_on")
-    a = 0.0
-    if on:
-        a = pct_slider(
-            "Adherence",
-            value_pct=75.0, step_pct=5.0, digits=0,
-            key=f"{key_prefix}_adh",
-            help="How consistently you do this habit"
-        )
-    return on, a
-
-# Canonical keys so UI labels, costs, and HR multipliers stay in sync
-CANON = {
-    "Consistent Sleep":         "sleep",
-    "Frequent Exercise":        "exercise",
-    "Frequent Sauna":           "sauna",
-    "Mediterranean Diet":       "mediterraneandiet",
-    "Meditation":               "meditation",
-    "Red-Light Therapy":        "redlight",
-    "Heavy Smoking":            "smoker",
-    "Heavy Drinking":           "heavyalcohol",
-    "Weight status":            "weight",
+    # Chemical (Harmful)
+    "Heavy Smoking":      2.50,
+    "Heavy Drinking":     1.35,
+    "Poor Air Quality":   1.10
 }
 
-helpful_adh = {}  # canonical_key -> adherence in [0,1]
-for name in BENEFICIAL:
-    key = CANON[name]  # keep keys stable across UI/engine/costs
-    default_on = PRESET_TOGGLES[preset].get(name, False)
-    on, a = helpful_block(name, f"help_{key}", default_on)
-    toggles[name] = on
-    if on:
-        helpful_adh[key] = a
+# Mapping specific UI labels to internal canonical keys
+CANON = {
+    "Frequent Exercise": "exercise",
+    "Daily Movement":    "steps",
+    "Frequent Sauna":    "sauna",
+    
+    "Caloric Restriction": "fasting",
+    "Mediterranean Diet": "mediterraneandiet",
+    "Low Sugar / Fiber":  "sugar",
+    
+    "Consistent Sleep": "sleep",
+    "Meditation":       "meditation",
+    
+    "Cold Plunge":       "cold",
+    "Red-Light Therapy": "redlight",
+    "Supplements":       "supplements",
+    
+    "Heavy Smoking":     "smoker",
+    "Heavy Drinking":    "heavyalcohol",
+    "Poor Air Quality":  "airquality",
+    
+    "Weight status":     "weight"
+}
 
-# ---- Harmful habits ----
-st.sidebar.subheader("Harmful habits")
+# Bucket Definitions
+BUCKETS = {
+    "hemo": {
+        "label": "❤️ Cardiovascular",
+        "type": "beneficial",
+        "habits": ["Frequent Exercise", "Daily Movement", "Frequent Sauna"]
+    },
+    "meta": {
+        "label": "🔥 Metabolic Health",
+        "type": "beneficial",
+        "habits": ["Caloric Restriction", "Mediterranean Diet", "Low Sugar / Fiber"]
+    },
+    "rest": {
+        "label": "🧠 Recovery & Neuro",
+        "type": "beneficial",
+        "habits": ["Consistent Sleep", "Meditation"]
+    },
+    "cell": {
+        "label": "🧬 Cellular Repair",
+        "type": "beneficial",
+        "habits": ["Cold Plunge", "Red-Light Therapy", "Supplements"]
+    },
+    "chem": {
+        "label": "🍺 Toxic Exposure",
+        "type": "harmful",
+        "habits": ["Heavy Smoking", "Heavy Drinking", "Poor Air Quality"]
+    }
+}
 
-def harmful_block(label: str, key_prefix: str):
-    """Full-width checkbox on one line; if enabled, show its slider directly below."""
-    on = st.sidebar.checkbox(
-        label,
-        value=PRESET_TOGGLES[preset].get(label, False),
-        key=f"{key_prefix}_on"
-    )
-    exposure = 0.0
-    if on:
-        exposure = pct_slider(
-            "Exposure",
-            value_pct=100.0, step_pct=5.0, digits=0,
-            key=f"{key_prefix}_exposure",
-            help="Percentage of the time or dose you're exposed to"
-        )
-    return on, exposure
+scale_choice = st.sidebar.selectbox("Risk Scaling Method", ["Log (recommended)", "Linear"], index=0, key="hazard_scale_mode", help="Logarithmic compounds; Linear adds.")
+scaling_mode = "log" if "log" in scale_choice.lower() else "linear"
 
-# Each harmful toggle sits on one line; slider appears directly underneath
-smoke_on, smoke_exposure = harmful_block("Heavy Smoking",  "smoke")
-drink_on, drink_exposure = harmful_block("Heavy Drinking", "drink")
+toggles = {}
+helpful_adh = {}
+harmful_exposure = {}
 
-# Keep these in toggles for the rest of the app
-toggles["Heavy Smoking"]  = smoke_on
-toggles["Heavy Drinking"] = drink_on
+# We will collect active habits here to calculate the winner
+active_bucket_habits = {bid: [] for bid in BUCKETS}
 
-# Final multipliers to feed engine (Excel rule)
+# --- Helper Function to Render a Bucket ---
+def render_bucket(bid, bdata):
+    with st.sidebar.expander(bdata["label"], expanded=False):
+        
+        # 1. Render Inputs
+        for name in bdata["habits"]:
+            key = CANON[name]
+            # Checkbox
+            on = st.checkbox(name, value=False, key=f"{key}_on")
+            toggles[name] = on
+            
+            # Slider
+            val = 0.0
+            if on:
+                label = "Adherence" if bdata["type"] == "beneficial" else "Exposure"
+                # Use session state to persist 
+                val = pct_slider(label, value_pct=75.0 if bdata["type"]=="beneficial" else 100.0, 
+                                 step_pct=5.0, digits=0, key=f"{key}_slider", sidebar=False)
+            
+            # Save data for calculation
+            if on:
+                base_hr = BASE_RISK_MULT[name]
+                # Calculate Effective HR immediately for "Winner" logic
+                eff_hr = _scale_hr(base_hr, val, mode=scaling_mode)
+                
+                active_bucket_habits[bid].append({
+                    "name": name,
+                    "key": key,
+                    "base_hr": base_hr,
+                    "effective_hr": eff_hr,
+                    "val": val
+                })
+                
+                if bdata["type"] == "beneficial":
+                    helpful_adh[key] = val
+                else:
+                    harmful_exposure[key] = val
 
-intervention_on = {}
+        # 2. Render Data Visibility / Math Explanation
+        if active_bucket_habits[bid]:
+            st.markdown("---") # Visual separator
+            
+            if bdata["type"] == "beneficial":
+                # BENEFICIAL LOGIC: Identify Winner
+                winner = min(active_bucket_habits[bid], key=lambda x: x["effective_hr"])
+                
+                # Visual readout
+                st.markdown(f"**Current Impact:** :green[**{winner['effective_hr']:.2f}x**]")
+                st.caption(f"Driven by **{winner['name']}**.") 
+                
+                if len(active_bucket_habits[bid]) > 1:
+                    st.caption(f"Note: Only the strongest habit in this category counts (Winning Hand logic).")
+
+            else:
+                # HARMFUL LOGIC: Stack Multipliers
+                import math
+                # Calculate combined impact for display (simple product for estimation)
+                combined_hr = math.prod([x["effective_hr"] for x in active_bucket_habits[bid]])
+                
+                st.markdown(f"**Current Impact:** :red[**{combined_hr:.2f}x**]")
+                st.caption("Risk factors stack. Values > 1.0 accelerate biological aging.")
+
+# --- SECTION A: LIFESTYLE OPTIMIZATION (Beneficial) ---
+st.sidebar.subheader("Lifestyle Optimization")
+st.sidebar.caption("Habits that slow aging")
+
+beneficial_keys = [k for k, v in BUCKETS.items() if v["type"] == "beneficial"]
+for bid in beneficial_keys:
+    render_bucket(bid, BUCKETS[bid])
+
+# --- SECTION B: RISK FACTORS (Harmful) ---
+st.sidebar.subheader("Risk Factors")
+st.sidebar.caption("Exposures that accelerate aging")
+
+harmful_keys = [k for k, v in BUCKETS.items() if v["type"] == "harmful"]
+for bid in harmful_keys:
+    render_bucket(bid, BUCKETS[bid])
+
+# -------------------------------------------------------------
+# 3) CONSTRUCT FINAL ENGINE INPUTS
+# -------------------------------------------------------------
+# This logic takes the UI choices stored in active_bucket_habits
+# and formats them into the dictionaries the simulation engine needs.
+
 lifestyle_HRs = {}
-for name, base in BASE_RISK_MULT.items():
-    key = CANON[name]
-    on = bool(toggles[name])
-    intervention_on[key] = on
+intervention_on = {}
 
-    if not on or base == 1.0:
-        m = 1.0
-    elif base < 1.0:
-        a = helpful_adh.get(key, 0.0)  # if off or not set, 0.0 gives m=1.0 in practice due to earlier 'on' gate
-        m = _scale_hr(base, a, mode=scaling_mode)
+for bid, bdata in BUCKETS.items():
+    active_items = active_bucket_habits[bid]
+    
+    if not active_items:
+        continue
+
+    if bdata["type"] == "beneficial":
+        # TRUMP CARD LOGIC: Only the winner sends their HR to the engine
+        winner = min(active_items, key=lambda x: x["effective_hr"])
+        
+        # Add winner to engine inputs
+        lifestyle_HRs[winner["key"]] = winner["effective_hr"]
+        intervention_on[winner["key"]] = True
+        
+        # Ensure losers are explicitly OFF in engine eyes (even if toggled ON in UI)
+        for item in active_items:
+            if item["key"] != winner["key"]:
+                intervention_on[item["key"]] = False
+                lifestyle_HRs[item["key"]] = 1.0  # Neutralize
+                
     else:
-        # Harmful exposure → scale by exposure on the log-hazard scale
-        if key == "smoker":
-            a = smoke_exposure
-        elif key == "heavyalcohol":
-            a = drink_exposure
-        else:
-            a = 1.0
-        m = _scale_hr(base, a, mode=scaling_mode)
+        # HARMFUL LOGIC: Stack them (pass all active HRs)
+        for item in active_items:
+            lifestyle_HRs[item["key"]] = item["effective_hr"]
+            intervention_on[item["key"]] = True
 
-    lifestyle_HRs[key] = float(m)
-
-# Add Weight status as its own factor (exact BMI only; off until BMI is valid)
-if bmi_hr is not None:
-    w_on = True
-    w_mult = float(bmi_hr)
+# Add Weight separately (it is calculated in Section 1 but added to the engine here)
+# We access 'bmi_hr' which was calculated in the "Demographics" section
+if st.session_state.get("bmi_hr") is not None:
+    lifestyle_HRs["weight"] = float(st.session_state["bmi_hr"])
+    intervention_on["weight"] = True
 else:
-    w_on = False
-    w_mult = 1.0  # neutral until user enters data
+    intervention_on["weight"] = False
 
-lifestyle_HRs["weight"] = w_mult
-intervention_on["weight"] = w_on
+# ------------------ Sidebar: Finance ------------------
+st.sidebar.subheader("Personal Finances")
 
-# ------------------ Sidebar: finance ------------------
-st.sidebar.header("3) Your Finances")
-
-# ------------------ Sidebar: habit costs (annual only) ------------------
-with st.sidebar.expander("Health Habit Costs", expanded=False):
-    st.caption("One field per habit: dollars per year (negative allowed if it saves you money). We apply healthcare inflation automatically each year.")
-
-    # canonical keys used everywhere (from CANON above)
-    ORDER = ["sleep", "exercise", "sauna", "mediterraneandiet", "meditation", "redlight", "smoker", "heavyalcohol", "weight"]
-    LABEL_FOR = {v: k for k, v in CANON.items()}  # reverse map: key -> UI label
-
-    # Defaults: previous one-time + recurring, converted to annual (keeps totals comparable)
+with st.sidebar.expander("Lifestyle Costs", expanded=False):
+    st.caption("Costs per year. Use a negative balance if it saves you money")
+    
+    # Updated Order for Costs to match your 5-bucket system
+    ORDER = ["exercise", "steps", "sauna", 
+             "fasting", "mediterraneandiet", "sugar",
+             "sleep", "meditation",
+             "cold", "redlight", "supplements",
+             "smoker", "heavyalcohol", "airquality", "weight"]
+             
+    # Helper to find the formatted Name (e.g. "Frequent Exercise") from the ID ("exercise")
+    LABEL_FOR = {v: k for k, v in CANON.items()}
+    
     ANNUAL_DEFAULT = {
-        "sleep":              50.0,         # ≈ $50/yr
-        "exercise":           240.0,      # gym, etc.
-        "sauna":              300.0,      # electricity/entry
-        "mediterraneandiet":  5400.0,     # extra groceries vs baseline
-        "meditation":         70.0,       # app subscription
-        "redlight":           150.0,        # ≈ $157/yr
-        "smoker":             800.0,      # cigarettes; make negative if quitting = savings
-        "heavyalcohol":       1000.0,     # user-editable
-        "weight":             0.0,         # no expense by default
+        "exercise": 240.0, "steps": 0.0, "sauna": 300.0,
+        "fasting": -1500.0, "mediterraneandiet": 5400.0, "sugar": 0.0,
+        "sleep": 50.0, "meditation": 70.0,
+        "cold": 100.0, "redlight": 150.0, "supplements": 600.0,
+        "smoker": 800.0, "heavyalcohol": 1000.0, "airquality": 0.0,
+        "weight": 0.0
     }
 
     annual_inputs = {}
     for key in ORDER:
-        label = LABEL_FOR[key]
+        label = LABEL_FOR.get(key, key)
+        
+        # 1. Check if the habit is actually turned on
         if key == "weight":
-            enabled = (weight_label != "None / Healthy Range")
+            # Weight is special: only show cost if we aren't using exact BMI
+            enabled = (weight_label != "Exact BMI")
         else:
-            enabled = toggles[label]
+            # For everything else, check the toggle from Section 2
+            enabled = toggles.get(label, False)
+        
+        # 2. Render logic: Only show the money input if the habit is enabled
+        if enabled:
+            annual_inputs[key] = st.number_input(
+                f"{label} ($/yr)", value=float(ANNUAL_DEFAULT.get(key, 0.0)),
+                step=50.0, key=f"{key}_annual"
+            )
+        else:
+            # CRITICAL: If hidden, tell the engine the cost is 0 so math doesn't break
+            annual_inputs[key] = 0.0
 
-        annual_inputs[key] = st.number_input(
-            f"{label} — $ per year",
-            value=float(ANNUAL_DEFAULT[key]),
-            step=50.0,
-            min_value=-1_000_000.0,  # allow negative for savings
-            key=f"{key}_annual",
-            disabled=not enabled,
-        )
-
-    # Feed the engine: horizon=1, one_time=0, recurring=annual
+    # Bundle it up for the engine
     intervention_costs = {
         k: IntervCost(horizon=1, one_time=0.0, recurring=float(annual_inputs[k]))
         for k in ORDER
@@ -661,40 +733,83 @@ with st.sidebar.expander("Health Habit Costs", expanded=False):
 
 start_capital = st.sidebar.number_input("Starting Capital ($)", min_value=0, value=10_000, step=1_000)
 di0 = st.sidebar.number_input("Yearly Spending Budget ($)", min_value=0, value=10_000, step=1_000)
-ret = pct_slider("Portfolio Return", min_pct=0.0, max_pct=15.0,
-                 value_pct=5.0, step_pct=0.1, digits=1, period="per year")
-income_growth = pct_slider("Spending Growth", min_pct=0.0, max_pct=10.0,
-                           value_pct=3.0, step_pct=0.1, digits=1, period="per year")
-hc_infl = pct_slider("Healthcare Inflation", min_pct=0.0, max_pct=10.0,
-                     value_pct=3.0, step_pct=0.1, digits=1, period="per year")
+ret = pct_slider("Portfolio Return", min_pct=0.0, max_pct=15.0, value_pct=5.0, step_pct=0.1, digits=1, period="per year")
+income_growth = pct_slider("Spending Growth", min_pct=0.0, max_pct=10.0, value_pct=3.0, step_pct=0.1, digits=1, period="per year")
+hc_infl = pct_slider("Healthcare Inflation", min_pct=0.0, max_pct=10.0, value_pct=3.0, step_pct=0.1, digits=1, period="per year")
 
 # ------------------ Sidebar: breakthroughs ------------------
-st.sidebar.header("4) Future Treatments, Ranked from Tiers 1-3")
-def tier_inputs(label, p0, g_pp, cap, cost, years_gained):
-    st.sidebar.subheader(label)
-    kid = label.lower().replace(" ", "_")
-    c = st.sidebar.number_input("Estimated Cost Today ($)", min_value=0, value=cost, step=1_000, key=f"{kid}_cost")
-    y = st.sidebar.number_input("Years Added (after purchase)", min_value=0.0, value=years_gained, step=0.1, key=f"{kid}_years")
-    p = pct_slider("Annual Chance of Occurring", min_pct=0.0, max_pct=50.0,
-               value_pct=p0*100.0, step_pct=0.5, digits=1, key=f"{kid}_p0", period="per year")
-    g = pct_slider("Increase in Chance Per Missed Year", min_pct=0.0, max_pct=5.0,
-               value_pct=g_pp*100.0, step_pct=0.05, digits=2, key=f"{kid}_gpp", period="per missed year")
-    cap_ = pct_slider("Max Annual Chance", min_pct=0.0, max_pct=100.0,
-                  value_pct=cap*100.0, step_pct=0.5, digits=1, key=f"{kid}_cap", period="per year")
-    return Tier(
-        cost_today=c,
-        years_gain=y,
-        base_prob=p,
-        growth_per_year=g,
-        cap_prob=cap_,
+st.sidebar.subheader("Scientific Discovery")
+
+# 1. Master Toggle: Plain English
+# "Simulate Medical Progress" -> "Include Future Technologies"
+use_tech = st.sidebar.checkbox("Simulate Future Treatments", value=True, 
+    help="Enable the simulation of future medical inventions that could extend lifespan at a cost")
+
+if not use_tech:
+    # Zero out if disabled
+    tier1 = Tier(0, 0, 0, 0, 0)
+    tier2 = Tier(0, 0, 0, 0, 0)
+    tier3 = Tier(0, 0, 0, 0, 0)
+    st.sidebar.caption("Future treatments disabled")
+else:
+    # 2. The Blue Box: Now explains the specific TYPES of tech being modeled
+    st.sidebar.info(
+        "**Simulating 3 Types of Progress:**\n\n"
+        "1. **Better Meds:** Improved daily treatments\n"
+        "2. **Disease Cures:** Eliminating major killers\n"
+        "3. **Age Reversal:** Cellular repair & rejuvenation"
     )
 
-tier1 = tier_inputs("Tier 1", p0=0.03,  g_pp=0.0015, cap=0.10, cost=12_000,     years_gained=0.7)
-tier2 = tier_inputs("Tier 2", p0=0.006, g_pp=0.0015, cap=0.10, cost=550_000,   years_gained=2.5)
-tier3 = tier_inputs("Tier 3", p0=0.0012,g_pp=0.0015, cap=0.10, cost=2_400_000, years_gained=7.0)
+    # 3. Expander
+    with st.sidebar.expander("Assumptions", expanded=False):
+        
+        # 4. Tabs: Named by FUNCTION, not "Tier"
+        # This is the biggest change for clarity
+        t1_tab, t2_tab, t3_tab = st.tabs(["Better Meds", "Disease Cures", "Age Reversal"])
+
+        def render_tier_tab(tab, label, description, cost, y_gain, p0, g_pp, cap):
+            with tab:
+                # 5. Clear Descriptions
+                st.caption(f"_{description}_")
+                st.markdown("") 
+                
+                kid = label.lower().replace(" ", "_")
+                
+                c = st.number_input("Estimated Cost Today ($)", min_value=0, value=cost, step=1000, key=f"{kid}_cost")
+                y = st.number_input("Years Added", min_value=0.0, value=y_gain, step=0.1, key=f"{kid}_years")
+                
+                # Sliders kept inside the tab (sidebar=False)
+                p = pct_slider("Base Annual Probability", min_pct=0.0, max_pct=50.0,
+                            value_pct=p0*100.0, step_pct=0.5, digits=1, 
+                            key=f"{kid}_p0", period="per year", sidebar=False,
+                            help="The chance this technology becomes available in any given year starting now.")
+                
+                g = pct_slider("Prob. Growth (per missed yr)", min_pct=0.0, max_pct=5.0,
+                            value_pct=g_pp*100.0, step_pct=0.05, digits=2, 
+                            key=f"{kid}_gpp", period="per missed year", sidebar=False,
+                            help="As science advances, the chance of discovery increases every year it hasn't happened yet.")
+                
+                cap_ = pct_slider("Max Annual Probability", min_pct=0.0, max_pct=100.0,
+                            value_pct=cap*100.0, step_pct=0.5, digits=1, 
+                            key=f"{kid}_cap", period="per year", sidebar=False)
+                
+                return Tier(cost_today=c, years_gain=y, base_prob=p, growth_per_year=g, cap_prob=cap_)
+
+        # Render with the new "Plain English" configuration
+        tier1 = render_tier_tab(t1_tab, "Better Meds", 
+            description="Continuous improvement of existing drugs (e.g., better statins, safer GLP-1s, earlier cancer screening).",
+            cost=12_000, y_gain=0.7, p0=0.03, g_pp=0.0015, cap=0.10)
+            
+        tier2 = render_tier_tab(t2_tab, "Disease Cures", 
+            description="Definitive cures for specific terminal illnesses (e.g., Alzheimer's reversal, personalized gene therapy).",
+            cost=550_000, y_gain=2.5, p0=0.006, g_pp=0.0015, cap=0.10)
+            
+        tier3 = render_tier_tab(t3_tab, "Age Reversal", 
+            description="Radical structural rejuvenation that slows or reverses biological aging (e.g., nanobots, organ printing).",
+            cost=2_400_000, y_gain=7.0, p0=0.0012, g_pp=0.0015, cap=0.10)
 
 # ------------------ Sidebar: longevity params ------------------
-st.sidebar.header("5) Longevity Parameters")
+st.sidebar.subheader("Lifespan Parameters")
 lambda_plateau = st.sidebar.number_input(
     "Late-age Risk Plateau λ",
     min_value=0.0, max_value=5.0, value=0.6, step=0.05,
@@ -706,18 +821,17 @@ le_improve = pct_slider("Life Expectancy Growth", min_pct=0.0, max_pct=2.0,
 max_age_today = st.sidebar.number_input("Frontier Age Today", min_value=100.0, max_value=130.0, value=119.0, step=0.5)
 
 # ------------------ Sidebar: simulation ------------------
-st.sidebar.header("6) Simulation")
+st.sidebar.subheader("Simulation")
 draws = st.sidebar.slider("Simulation Runs", 1000, 50000, 5000, step=1000)
 seed = st.sidebar.number_input("Random Seed (reproducible)", min_value=0, max_value=1_000_000, value=49, step=1)
 
 import hashlib, json
 
 def _hash_inputs():
-    # Pull BMI-related fields from session state (they exist even when empty)
+    # Pull BMI-related fields from session state
     bmi_val = st.session_state.get("bmi")
     bmi_hr  = st.session_state.get("bmi_hr")
-    units   = st.session_state.get("bmi_units")  # "US (ft/in, lb)" or "Metric (cm, kg)"
-    # Raw text boxes, so a single keystroke clears stale results
+    units   = st.session_state.get("bmi_units")
     ft_s  = st.session_state.get("ht_ft")
     in_s  = st.session_state.get("ht_in")
     lb_s  = st.session_state.get("wt_lb")
@@ -727,20 +841,19 @@ def _hash_inputs():
     cfg = dict(
         age=int(age), sex=str(sex),
         scaling_mode=scaling_mode,
-        preset=str(preset),
+        
+        # --- NEW: Track the 5-Bucket Dictionaries ---
         toggles=toggles,
         helpful_adh=helpful_adh,
+        harmful_exposure=harmful_exposure,
+        # --------------------------------------------
+
         adherence=1.0,
 
-        # Harmful exposures
-        smoke_on=bool(smoke_on), smoke_exposure=float(smoke_exposure),
-        drink_on=bool(drink_on), drink_exposure=float(drink_exposure),
-
-        # BMI inputs (both derived and raw so any edit clears results)
+        # BMI inputs
         bmi=bmi_val, bmi_hr=bmi_hr, bmi_units=units,
         ht_ft=ft_s, ht_in=in_s, wt_lb=lb_s, ht_cm=hcm_s, wt_kg=kg_s,
 
-        # Legacy label kept for stability (always "Exact BMI" now)
         weight_label=str(weight_label),
 
         # Longevity + finance
@@ -758,7 +871,7 @@ def _hash_inputs():
     )
     s = json.dumps(cfg, sort_keys=True, default=float)
     return hashlib.sha256(s.encode()).hexdigest()
-
+    
 new_sig = _hash_inputs()
 if "input_sig" not in st.session_state:
     st.session_state.input_sig = new_sig
@@ -1173,9 +1286,20 @@ else:
 
 # ROI as a distribution, then report median
 roi_draw = np.full_like(yrs_by_draw, np.nan, dtype=float)
+
+# draws where we actually spent money
 nz = spend_by_draw > 0
-roi_draw[nz] = yrs_by_draw[nz] / (spend_by_draw[nz] / 100000.0)
-roi_median = float(np.nanmedian(roi_draw))                                 # headline ROI
+
+if np.any(nz):
+    roi_draw[nz] = yrs_by_draw[nz] / (spend_by_draw[nz] / 100000.0)
+    roi_median = float(np.nanmedian(roi_draw))
+else:
+    # No spending at all → define ROI as 0 yrs / $100k so UI shows "0 yrs"
+    roi_median = 0.0
+
+# extra safety in case something upstream still spits out nonsense
+if not np.isfinite(roi_median):
+    roi_median = 0.0
 
 # ----- Bequest at death (medians by scenario, then delta) -----
 def _terminal_wealth_at_death(bal, alive_mask):
@@ -1201,7 +1325,7 @@ with c1:
     st.metric("Expected treatment costs", f"${typ_cost_total:,.0f}")
 
 with c2:
-    st.metric("Years gained for every $100k", f"{roi_median:.2f} yrs")
+    st.metric("Years gained for every $100k", f"{roi_median:.2f} yrs")  # will show 0.00 yrs when no spend
 
 def _fmt_signed_currency(x):
     sign = "+" if x > 0 else ""  # minus sign will come from format itself
