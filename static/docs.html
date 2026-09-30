@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Utility Model &mdash; Methodology & Documentation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #fafbfc;
+      color: #24292f;
+      line-height: 1.65;
+    }
+    .callout-info {
+      background-color: #ddf4ff;
+      border-left: 4px solid #0969da;
+      padding: 12px 16px;
+      border-radius: 0 6px 6px 0;
+      font-size: 13px;
+      color: #1f2328;
+    }
+    .callout-warn {
+      background-color: #fff8c5;
+      border-left: 4px solid #bf8700;
+      padding: 12px 16px;
+      border-radius: 0 6px 6px 0;
+      font-size: 13px;
+      color: #1f2328;
+    }
+    .nav-link:hover { color: #0969da; border-left-color: #0969da; }
+    .nav-link.active { color: #0969da; border-left-color: #0969da; font-weight: 600; }
+    html { scroll-behavior: smooth; }
+    /* Ensure anchored sections are centered with offset for sticky header */
+    section[id] {
+      scroll-margin-top: 140px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-40 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm">
+    <div class="flex items-center gap-3">
+      <button onclick="handleBackToSim()" class="flex items-center gap-2 text-gray-700 hover:text-blue-600 transition font-medium text-sm cursor-pointer bg-transparent border-0 p-0">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+        <span>Back to Simulator</span>
+      </button>
+      <span class="text-gray-300">|</span>
+      <span class="font-bold text-gray-900 text-sm">Time Utility Model &mdash; Methodology & Documentation</span>
+    </div>
+    <span class="px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-800 rounded">v2.0 Actuarial Spec</span>
+  </header>
+
+  <div class="flex-1 max-w-7xl mx-auto w-full px-6 py-8 flex gap-10">
+
+    <!-- Table of Contents -->
+    <nav class="hidden lg:block w-64 shrink-0 sticky top-20 self-start text-xs space-y-1">
+      <div class="font-bold uppercase tracking-wider text-gray-500 mb-3 text-[11px]">Table of Contents</div>
+      <a href="#overview" class="nav-link block py-1.5 pl-3 border-l-2 border-transparent text-gray-600">1. Executive Overview</a>
+      <a href="#actuarial" class="nav-link block py-1.5 pl-3 border-l-2 border-transparent text-gray-600">2. Actuarial Baseline (SSA)</a>
+      <a href="#gompertz" class="nav-link block py-1.5 pl-3 border-l-2 border-transparent text-gray-600">3. Gompertz Plateau & Drift</a>
+      <a href="#winning-hand" class="nav-link block py-1.5 pl-3 border-l-2 border-transparent text-gray-600">4. The "Winning Hand" Principle</a>
+      <a href="#toxic-stacking" class="nav-link block py-1.5 pl-3 border-l-2 border-transparent text-gray-600">5. Multiplicative Toxic Risks</a>
+      <a href="#bmi" class="nav-link block py-1.5 pl-3 border-l-2 border-transparent text-gray-600">6. BMI Hazard Curve</a>
+      <a href="#tech-discovery" class="nav-link block py-1.5 pl-3 border-l-2 border-transparent text-gray-600">7. Scientific Discovery Tiers</a>
+      <a href="#capital-engine" class="nav-link block py-1.5 pl-3 border-l-2 border-transparent text-gray-600">8. Wealth & Capital Compounding</a>
+      <a href="#monte-carlo" class="nav-link block py-1.5 pl-3 border-l-2 border-transparent text-gray-600">9. Deterministic vs. Monte Carlo</a>
+      <a href="#forest-plot" class="nav-link block py-1.5 pl-3 border-l-2 border-transparent text-gray-600">10. Forest Plot Attribution</a>
+    </nav>
+
+    <main class="flex-1 min-w-0 space-y-10 text-sm leading-relaxed text-gray-800 pb-20">
+
+      <!-- 1. Overview -->
+      <section id="overview" class="space-y-3">
+        <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Actuarial Longevity & Time Capital Methodology</h1>
+        <p class="text-base text-gray-600">
+          The <strong>Time Utility Model (TUM)</strong> bridges actuarial mortality tables, clinical epidemiology, and personal capital accumulation into a single simulation engine.
+        </p>
+        <p>
+          Traditional financial planning treats life expectancy as a single static number ("plan to age 90"). In reality, lifespan is a dynamic distribution driven by daily habits, biological aging constraints, and the capital required to access future medical breakthroughs.
+        </p>
+        <div class="callout-info">
+          <strong>Core Objective:</strong> Answer two questions for an individual:
+          <ol class="list-decimal ml-5 mt-1 space-y-0.5">
+            <li><em>"How many additional years do my current habits add?"</em></li>
+            <li><em>"Will I have enough capital to afford life-extending technologies when they arrive?"</em></li>
+          </ol>
+        </div>
+      </section>
+
+      <hr class="border-gray-200">
+
+      <!-- 2. Actuarial Baseline -->
+      <section id="actuarial" class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-bold text-gray-900">2. Actuarial Baseline (SSA Cohort Tables)</h2>
+          <span class="text-xs font-mono bg-gray-100 text-gray-600 px-2 py-0.5 rounded">SSA 2020</span>
+        </div>
+        <p>
+          Every projection starts with official <strong>U.S. Social Security Administration</strong> cohort mortality tables, which give the empirical annual probability of death at each age from 18 to 119 for both men and women.
+        </p>
+        <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-700 space-y-1">
+          <div class="font-semibold text-gray-900">How Baseline Survival Works:</div>
+          <p>Your chance of surviving to any future age is the compounding probability of surviving each individual year along the way. If your risk of death at age 50 is 0.4%, your survival rate that year is 99.6%. The model chains these year-by-year.</p>
+        </div>
+        <p class="text-xs text-gray-500">
+          This anchors the model in real population data before any personalized adjustments.
+        </p>
+      </section>
+
+      <hr class="border-gray-200">
+
+      <!-- 3. Gompertz -->
+      <section id="gompertz" class="space-y-3">
+        <h2 class="text-xl font-bold text-gray-900">3. Gompertz Hazard Curve & Frontier Drift</h2>
+        <p>
+          Human mortality follows <strong>Gompertz's Law</strong>: beyond age 30, the chance of death roughly doubles every 7 to 8 years. But at extreme ages (100+), the acceleration slows into a <em>mortality plateau</em>.
+        </p>
+        <ul class="list-disc ml-6 space-y-1.5 text-xs">
+          <li>
+            <strong>Late-Age Risk Cap (Plateau):</strong> Caps the maximum single-year mortality risk past the empirical frontier age. At 60%, annual risk never exceeds that ceiling, even beyond 100, matching observed supercentenarian data.
+          </li>
+          <li>
+            <strong>Frontier Age Drift:</strong> The maximum survival boundary extends by <strong>15 days per calendar year</strong> by default, reflecting secular gains in critical care, surgery, and public health.
+          </li>
+        </ul>
+      </section>
+
+      <hr class="border-gray-200">
+
+      <!-- 4. Winning Hand -->
+      <section id="winning-hand" class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-bold text-gray-900">4. The "Winning Hand" Principle</h2>
+          <span class="text-xs font-semibold bg-green-100 text-green-800 px-2 py-0.5 rounded">Core Innovation</span>
+        </div>
+        <p>
+          A common flaw in longevity calculators is <em>additive stacking</em>: if running cuts risk 30%, sauna 20%, and walking 25%, a naive model adds them to 75% total reduction. Stack enough habits and you become immortal, which is biologically impossible.
+        </p>
+        <p>
+          In reality, physiological systems share pathways. If your cardiovascular system is already optimized through intense exercise, sauna adds minimal additional vascular protection.
+        </p>
+        <div class="callout-info">
+          <strong>Rule:</strong> Within each physiological bucket, <strong>only your single strongest active habit counts</strong>.
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border border-gray-200 rounded text-xs mt-2">
+            <thead class="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold">
+              <tr>
+                <th class="p-2.5">Bucket</th>
+                <th class="p-2.5">Candidate Habits</th>
+                <th class="p-2.5">Base HR</th>
+                <th class="p-2.5">Mechanism</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr>
+                <td class="p-2.5 font-semibold text-gray-900">Cardiovascular</td>
+                <td class="p-2.5">Frequent Exercise<br>Daily Movement<br>Frequent Sauna</td>
+                <td class="p-2.5 font-mono">0.68x / 0.72x / 0.77x</td>
+                <td class="p-2.5 text-gray-600">VO2 max, arterial compliance, stroke volume</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-semibold text-gray-900">Metabolic</td>
+                <td class="p-2.5">Caloric Restriction<br>Mediterranean Diet<br>Low Sugar / Fiber</td>
+                <td class="p-2.5 font-mono">0.75x / 0.77x / 0.85x</td>
+                <td class="p-2.5 text-gray-600">Insulin sensitivity, glycemic control</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-semibold text-gray-900">Recovery & Neuro</td>
+                <td class="p-2.5">Consistent Sleep<br>Meditation</td>
+                <td class="p-2.5 font-mono">0.88x / 0.93x</td>
+                <td class="p-2.5 text-gray-600">Glymphatic clearance, cortisol regulation</td>
+              </tr>
+              <tr>
+                <td class="p-2.5 font-semibold text-gray-900">Cellular Repair</td>
+                <td class="p-2.5">Supplements<br>Cold Plunge<br>Red-Light Therapy</td>
+                <td class="p-2.5 font-mono">0.95x / 0.96x / 0.98x</td>
+                <td class="p-2.5 text-gray-600">Mitochondrial biogenesis, hormesis</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 class="font-bold text-gray-900 pt-1 text-sm">Adherence Scaling</h3>
+        <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-700 space-y-1.5">
+          <div><strong>Logarithmic (Recommended):</strong> The first 50% of consistency delivers most of the benefit. Going from 90% to 100% adherence adds diminishing returns, mirroring biology.</div>
+          <div><strong>Linear:</strong> Benefit scales evenly with adherence (50% adherence = 50% of the risk reduction).</div>
+        </div>
+        <p class="text-xs text-gray-600">
+          Within each category, only your highest-performing habit carries. Three cardio exercises won't triple your score.
+        </p>
+      </section>
+
+      <hr class="border-gray-200">
+
+      <!-- 5. Toxic Stacking -->
+      <section id="toxic-stacking" class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-bold text-gray-900">5. Multiplicative Toxic Risk Stacking</h2>
+          <span class="text-xs font-semibold bg-red-100 text-red-800 px-2 py-0.5 rounded">Compounding</span>
+        </div>
+        <p>
+          While healthy habits have diminishing returns, <strong>toxins compound</strong>. Smoking damages blood vessels; alcohol stresses the liver and heart. Together, they multiply mortality risk rather than capping at the worst one.
+        </p>
+        <div class="callout-warn">
+          <strong>Rule:</strong> Harmful exposures are <strong>multiplicative</strong>, not winning-hand. They attack different systems simultaneously.
+        </div>
+        <div class="bg-red-50 border border-red-200 rounded p-3 text-xs text-red-900">
+          <strong>Example:</strong> Smoking (2.5x) + Heavy Drinking (1.35x) = <strong>3.38x annual mortality risk</strong>, not 2.5x.
+        </div>
+        <ul class="list-disc ml-6 space-y-0.5 text-xs">
+          <li><strong>Heavy Smoking:</strong> 2.50x (vascular, oncological, pulmonary damage)</li>
+          <li><strong>Heavy Drinking:</strong> 1.35x (cardiomyopathy, hepatic failure)</li>
+          <li><strong>Poor Air Quality:</strong> 1.10x (chronic PM2.5 inflammation)</li>
+        </ul>
+      </section>
+
+      <hr class="border-gray-200">
+
+      <!-- 6. BMI -->
+      <section id="bmi" class="space-y-3">
+        <h2 class="text-xl font-bold text-gray-900">6. BMI Hazard Curve</h2>
+        <p>
+          BMI follows a <strong>U-shaped mortality curve</strong>. Lowest risk sits at BMI <strong>22.5</strong> (1.0x baseline).
+        </p>
+        <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-700 space-y-1">
+          <p><strong>Above 25:</strong> Risk rises as excess weight increases cardiovascular strain, insulin resistance, and inflammation.</p>
+          <p><strong>Below 18.5:</strong> Risk also spikes due to frailty, muscle loss, and weakened immune response.</p>
+        </div>
+      </section>
+
+      <hr class="border-gray-200">
+
+      <!-- 7. Scientific Discovery -->
+      <section id="tech-discovery" class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-bold text-gray-900">7. Scientific Discovery Tiers</h2>
+          <span class="text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-0.5 rounded">Stochastic</span>
+        </div>
+        <p>
+          Future breakthroughs arrive as probabilistic events over calendar time, not on a fixed schedule. Three tiers:
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="border border-gray-200 bg-white p-3 rounded">
+            <div class="font-bold text-xs uppercase tracking-wider text-blue-700">Tier 1: Better Meds</div>
+            <div class="text-lg font-bold text-gray-800 mt-1">$12,000</div>
+            <div class="text-xs text-green-700 font-semibold">+0.7 years</div>
+            <p class="text-[11px] text-gray-500 mt-1">Safer GLP-1s, next-gen statins, liquid biopsy screening.</p>
+          </div>
+          <div class="border border-gray-200 bg-white p-3 rounded">
+            <div class="font-bold text-xs uppercase tracking-wider text-indigo-700">Tier 2: Disease Cures</div>
+            <div class="text-lg font-bold text-gray-800 mt-1">$550,000</div>
+            <div class="text-xs text-green-700 font-semibold">+2.5 years</div>
+            <p class="text-[11px] text-gray-500 mt-1">CAR-T solid tumors, Alzheimer's plaque clearing.</p>
+          </div>
+          <div class="border border-gray-200 bg-white p-3 rounded">
+            <div class="font-bold text-xs uppercase tracking-wider text-purple-700">Tier 3: Age Reversal</div>
+            <div class="text-lg font-bold text-gray-800 mt-1">$2,400,000</div>
+            <div class="text-xs text-green-700 font-semibold">+7.0 years</div>
+            <p class="text-[11px] text-gray-500 mt-1">Cellular reprogramming, tissue engineering, organ replacement.</p>
+          </div>
+        </div>
+        <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-700 space-y-1">
+          <p>Each tier's annual arrival probability ramps up over time as scientific momentum builds.</p>
+          <p><strong>Discovery does not guarantee access.</strong> You can only adopt a treatment if your portfolio covers the inflation-adjusted cost at that age.</p>
+        </div>
+      </section>
+
+      <hr class="border-gray-200">
+
+      <!-- 8. Capital Engine -->
+      <section id="capital-engine" class="space-y-3">
+        <h2 class="text-xl font-bold text-gray-900">8. Wealth Compounding & Healthcare Inflation</h2>
+        <p>Your portfolio runs in parallel with your biological lifespan. Each year:</p>
+        <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-700 space-y-1.5">
+          <div><strong>1. Growth:</strong> Investments compound at your expected real return (e.g. 5%).</div>
+          <div><strong>2. Savings:</strong> Annual income contributions are added (growing with wage inflation).</div>
+          <div><strong>3. Health Costs:</strong> Routine habit expenses (gym, supplements, organic food) are deducted.</div>
+          <div><strong>4. Breakthroughs:</strong> If a medical cure arrives, its inflation-adjusted price is deducted.</div>
+        </div>
+        <div class="callout-info">
+          <strong>The Trade-off:</strong> Overspending on low-ROI interventions today erodes compound growth, potentially locking you out of high-impact cures arriving in your 70s and 80s.
+        </div>
+      </section>
+
+      <hr class="border-gray-200">
+
+      <!-- 9. Monte Carlo -->
+      <section id="monte-carlo" class="space-y-3">
+        <h2 class="text-xl font-bold text-gray-900">9. Deterministic vs. Monte Carlo</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="border border-gray-200 bg-white p-4 rounded">
+            <h3 class="font-bold text-gray-900 text-sm">Expected Lifespan (Deterministic)</h3>
+            <p class="text-xs text-gray-600 mt-1">
+              The mathematical average outcome. Assumes normal survival rates year after year with no random shocks. Ideal for baseline financial projections.
+            </p>
+          </div>
+          <div class="border border-gray-200 bg-white p-4 rounded">
+            <h3 class="font-bold text-gray-900 text-sm">Range of Possibilities (Monte Carlo)</h3>
+            <p class="text-xs text-gray-600 mt-1">
+              Simulates <strong>1,000 to 20,000 parallel lifetimes</strong>. Rolls the dice each year to reveal your 90% confidence window, from worst-case (P5) to best-case (P95) outcomes.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <hr class="border-gray-200">
+
+      <!-- 10. Forest Plot -->
+      <section id="forest-plot" class="space-y-3">
+        <h2 class="text-xl font-bold text-gray-900">10. Forest Plot & Attribution Analysis</h2>
+        <p>
+          To isolate the impact of a single habit, the engine runs a <strong>counterfactual loop</strong>:
+        </p>
+        <ol class="list-decimal ml-6 space-y-1 text-xs text-gray-700">
+          <li>Temporarily disable one habit, resetting it to neutral.</li>
+          <li>Re-run the full simulation without it.</li>
+          <li>The difference reveals the exact years gained or lost from that single choice.</li>
+        </ol>
+        <p class="text-xs text-gray-600">
+          Results are visualized in the interactive Forest Plot on a logarithmic hazard ratio scale, showing both relative risk and absolute life-years gained or lost per factor.
+        </p>
+      </section>
+
+      <!-- Footer -->
+      <div class="pt-8 border-t border-gray-200 flex items-center justify-between">
+        <div class="text-xs text-gray-500">
+          Time Utility Model &copy; 2026.
+        </div>
+        <button onclick="handleBackToSim()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded transition shadow-sm cursor-pointer border-0">
+          <span>Return to Simulator</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+        </button>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    function scrollToSection(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        // Center the element in viewport
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    function checkHashOnLoad() {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) {
+        setTimeout(() => scrollToSection(hash), 150);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', checkHashOnLoad);
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) scrollToSection(hash);
+    });
+
+    function handleBackToSim() {
+      if (window.self !== window.top) {
+        try {
+          if (window.parent && typeof window.parent.closeDocsDrawer === 'function') {
+            window.parent.closeDocsDrawer();
+            return;
+          }
+        } catch (e) {}
+      }
+      window.location.href = '/';
+    }
+  </script>
+</body>
+</html>

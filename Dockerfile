@@ -20,11 +20,11 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # Copy the rest of your application code
 COPY . .
 
-# Streamlit specific: expose the port
-EXPOSE 8501
+# Expose port (Railway will map $PORT dynamically)
+EXPOSE 8000
 
 # Healthcheck
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
+HEALTHCHECK CMD curl --fail http://localhost:${PORT:-8000}/health || exit 1
 
-# The Command to run the app
-CMD streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
+# Command to run the high-performance FastAPI engine
+CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}"]

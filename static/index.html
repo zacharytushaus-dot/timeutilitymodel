@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Utility Model</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background-color: #ffffff;
+      color: #31333F;
+    }
+    input[type=range] {
+      accent-color: #ff4b4b;
+    }
+    .st-sidebar {
+      background-color: #f0f2f6;
+      border-right: 1px solid #e6e9ef;
+    }
+    .st-btn-run {
+      background-color: #cddae9;
+      color: #09427d;
+      border: 1px solid #cddae9;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+    .st-btn-run:hover {
+      background-color: #dbe6f2;
+      border-color: #dbe6f2;
+      color: #072f59;
+    }
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    /* Help icon — small inline circle with ? */
+    .tip-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      font-size: 9px;
+      color: #6b7280;
+      border: 1px solid #cbd5e1;
+      cursor: help;
+      margin-left: 4px;
+      font-weight: bold;
+      line-height: 1;
+      background: #ffffff;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+
+    /* Global floating tooltip (attached to body, escapes all overflow) */
+    #gtip {
+      position: fixed;
+      z-index: 99999;
+      background-color: #1f2937;
+      color: #f9fafb;
+      text-align: left;
+      padding: 7px 10px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      line-height: 1.4;
+      width: 240px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s ease;
+      font-weight: normal;
+      text-transform: none;
+    }
+    #gtip.visible { opacity: 1; }
+
+    .tab-btn.active {
+      border-bottom: 2px solid #ff4b4b;
+      color: #ff4b4b;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+  <!-- Global tooltip element -->
+  <div id="gtip"></div>
+
+  <header class="border-b border-gray-200 bg-white px-6 py-2.5 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <button onclick="toggleSidebar()" class="text-gray-600 hover:text-black p-1 rounded hover:bg-gray-100" title="Toggle Sidebar">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+      </button>
+      <span class="font-bold text-base text-gray-800 tracking-tight">Time Utility Model</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="openDocsDrawer()" class="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded border border-gray-300 transition">
+        <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+        <span>Methodology & Docs</span>
+      </button>
+      <div class="text-xs text-gray-400 font-sans hidden sm:block">Actuarial Lifespan & Longevity Capital Engine</div>
+    </div>
+  </header>
+
+  <div class="flex-1 flex overflow-hidden">
+
+    <aside id="sidebar" class="w-80 shrink-0 st-sidebar flex flex-col h-full border-r border-gray-200 transition-all duration-200 overflow-hidden">
+      <div class="p-4 overflow-y-auto custom-scroll flex-1 space-y-5 text-sm">
+
+        <!-- Demographics -->
+        <div>
+          <div class="flex items-center mb-2">
+            <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider">Demographics</h3>
+            <span class="tip-icon" data-tip="Basic starting info used to look up standard life expectancy tables from the Social Security Administration.">?</span>
+          </div>
+          <div class="space-y-2">
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">
+                Age
+                <span class="tip-icon" data-tip="How old you are now. The simulation starts from this age.">?</span>
+              </label>
+              <input type="number" id="in_age" value="30" min="18" max="95" class="w-full bg-white border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:border-red-500">
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">
+                Sex
+                <span class="tip-icon" data-tip="Used to select male or female life expectancy tables, since mortality rates differ by sex.">?</span>
+              </label>
+              <select id="in_sex" class="w-full bg-white border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:border-red-500">
+                <option value="Male" selected>Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <hr class="border-gray-200">
+
+        <!-- Body Mass -->
+        <div>
+          <div class="flex items-center mb-2">
+            <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider">Body Mass</h3>
+            <span class="tip-icon" data-tip="Your height and weight are used to calculate BMI, which adjusts your mortality risk. A BMI of 22.5 is the healthiest baseline.">?</span>
+          </div>
+          <div class="flex items-center gap-4 mb-2 text-xs">
+            <label class="inline-flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="unit_mode" value="US" checked onchange="switchBmiUnit('US')">
+              <span>US (ft/in, lb)</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="unit_mode" value="Metric" onchange="switchBmiUnit('Metric')">
+              <span>Metric (cm, kg)</span>
+            </label>
+          </div>
+          <div id="bmi_us_fields" class="grid grid-cols-3 gap-1.5">
+            <input type="number" id="in_ft" placeholder="ft" class="bg-white border border-gray-300 rounded px-2 py-1 text-xs" oninput="calcBmi()">
+            <input type="number" id="in_in" placeholder="in" class="bg-white border border-gray-300 rounded px-2 py-1 text-xs" oninput="calcBmi()">
+            <input type="number" id="in_lb" placeholder="lb" class="bg-white border border-gray-300 rounded px-2 py-1 text-xs" oninput="calcBmi()">
+          </div>
+          <div id="bmi_metric_fields" class="grid grid-cols-2 gap-1.5 hidden">
+            <input type="number" id="in_cm" placeholder="cm" class="bg-white border border-gray-300 rounded px-2 py-1 text-xs" oninput="calcBmi()">
+            <input type="number" id="in_kg" placeholder="kg" class="bg-white border border-gray-300 rounded px-2 py-1 text-xs" oninput="calcBmi()">
+          </div>
+          <div id="bmi_status_box" class="text-[11px] text-gray-500 mt-1.5">Leave blank or enter values to include BMI hazard ratio.</div>
+        </div>
+
+        <hr class="border-gray-200">
+
+        <!-- Model Configuration -->
+        <div>
+          <div class="flex items-center mb-2">
+            <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider">Model Configuration</h3>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-600 mb-1">
+              Risk Scaling Method
+              <span class="tip-icon" data-tip="How multiple habits combine. Log (recommended) is the standard actuarial method — habits compound realistically. Linear is simpler but overstates combined benefits.">?</span>
+            </label>
+            <select id="in_scaling" class="w-full bg-white border border-gray-300 rounded px-2.5 py-1 text-xs" onchange="updateBucketState()">
+              <option value="log" selected>Log (recommended)</option>
+              <option value="linear">Linear</option>
+            </select>
+          </div>
+        </div>
+
+        <hr class="border-gray-200">
+
+        <!-- Lifestyle Optimization -->
+        <div class="space-y-3">
+          <div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center">
+                <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider">Lifestyle Optimization</h3>
+                <span class="tip-icon" data-tip="Healthy habits that slow aging. Only the single best habit in each group counts — you don't get extra credit for doing everything in one category.">?</span>
+              </div>
+              <button onclick="openDocsDrawer('winning-hand')" class="text-[10px] text-blue-600 hover:text-blue-800 font-medium">Docs &rarr;</button>
+            </div>
+            <p class="text-[11px] text-gray-500">Habits that slow aging (Winning Hand logic)</p>
+          </div>
+
+          <!-- Cardiovascular -->
+          <details class="bg-white border border-gray-200 rounded p-2 text-xs" open>
+            <summary class="font-semibold cursor-pointer text-gray-800 flex justify-between items-center">
+              <span>Cardiovascular</span>
+              <span id="badge_hemo" class="text-[11px] text-gray-500 font-normal">1.00x</span>
+            </summary>
+            <div class="pt-2 space-y-2.5 border-t border-gray-100 mt-2">
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_exercise" checked onchange="updateBucketState()">
+                    <span>Frequent Exercise</span>
+                  </span>
+                  <span id="lbl_exercise_val" class="text-gray-500">75%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Adherence
+                    <span class="tip-icon" data-tip="How closely you stick to an exercise routine. 0% = don't exercise; 100% = regular intense workouts that strongly protect your heart.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_exercise" min="0" max="100" value="75" class="w-full h-1 mt-0.5" oninput="updateRangeVal('exercise')">
+              </div>
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_steps" onchange="updateBucketState()">
+                    <span>Daily Movement</span>
+                  </span>
+                  <span id="lbl_steps_val" class="text-gray-500">75%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Adherence
+                    <span class="tip-icon" data-tip="How active you are day-to-day. 0% = mostly sitting; 100% = 10,000+ steps per day.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_steps" min="0" max="100" value="75" class="w-full h-1 mt-0.5 opacity-50" oninput="updateRangeVal('steps')">
+              </div>
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_sauna" onchange="updateBucketState()">
+                    <span>Frequent Sauna</span>
+                  </span>
+                  <span id="lbl_sauna_val" class="text-gray-500">75%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Adherence
+                    <span class="tip-icon" data-tip="How often you use a sauna. 0% = never; 100% = 4+ sessions per week, which is linked to better heart health.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_sauna" min="0" max="100" value="75" class="w-full h-1 mt-0.5 opacity-50" oninput="updateRangeVal('sauna')">
+              </div>
+            </div>
+          </details>
+
+          <!-- Metabolic Health -->
+          <details class="bg-white border border-gray-200 rounded p-2 text-xs" open>
+            <summary class="font-semibold cursor-pointer text-gray-800 flex justify-between items-center">
+              <span>Metabolic Health</span>
+              <span id="badge_meta" class="text-[11px] text-gray-500 font-normal">1.00x</span>
+            </summary>
+            <div class="pt-2 space-y-2.5 border-t border-gray-100 mt-2">
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_fasting" onchange="updateBucketState()">
+                    <span>Caloric Restriction</span>
+                  </span>
+                  <span id="lbl_fasting_val" class="text-gray-500">75%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Adherence
+                    <span class="tip-icon" data-tip="How consistently you limit calories. 0% = no restriction; 100% = sustained caloric restriction, which may slow aging.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_fasting" min="0" max="100" value="75" class="w-full h-1 mt-0.5 opacity-50" oninput="updateRangeVal('fasting')">
+              </div>
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_mediterraneandiet" checked onchange="updateBucketState()">
+                    <span>Mediterranean Diet</span>
+                  </span>
+                  <span id="lbl_mediterraneandiet_val" class="text-gray-500">75%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Adherence
+                    <span class="tip-icon" data-tip="How closely you follow a Mediterranean diet. 0% = don't follow it; 100% = consistently eat whole foods, fish, olive oil, and limited processed food.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_mediterraneandiet" min="0" max="100" value="75" class="w-full h-1 mt-0.5" oninput="updateRangeVal('mediterraneandiet')">
+              </div>
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_sugar" onchange="updateBucketState()">
+                    <span>Low Sugar / Fiber</span>
+                  </span>
+                  <span id="lbl_sugar_val" class="text-gray-500">75%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Adherence
+                    <span class="tip-icon" data-tip="How well you limit added sugar and eat enough fiber. 0% = high sugar, low fiber; 100% = minimal added sugar, plenty of fiber from whole foods.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_sugar" min="0" max="100" value="75" class="w-full h-1 mt-0.5 opacity-50" oninput="updateRangeVal('sugar')">
+              </div>
+            </div>
+          </details>
+
+          <!-- Recovery & Neuro -->
+          <details class="bg-white border border-gray-200 rounded p-2 text-xs" open>
+            <summary class="font-semibold cursor-pointer text-gray-800 flex justify-between items-center">
+              <span>Recovery & Neuro</span>
+              <span id="badge_rest" class="text-[11px] text-gray-500 font-normal">1.00x</span>
+            </summary>
+            <div class="pt-2 space-y-2.5 border-t border-gray-100 mt-2">
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_sleep" checked onchange="updateBucketState()">
+                    <span>Consistent Sleep</span>
+                  </span>
+                  <span id="lbl_sleep_val" class="text-gray-500">80%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Adherence
+                    <span class="tip-icon" data-tip="Sleep quality and consistency. 0% = irregular, poor sleep; 100% = regular 7.5+ hours per night on a consistent schedule.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_sleep" min="0" max="100" value="80" class="w-full h-1 mt-0.5" oninput="updateRangeVal('sleep')">
+              </div>
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_meditation" onchange="updateBucketState()">
+                    <span>Meditation</span>
+                  </span>
+                  <span id="lbl_meditation_val" class="text-gray-500">75%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Adherence
+                    <span class="tip-icon" data-tip="How often you practice meditation. 0% = never; 100% = daily practice, which is linked to lower stress and better health outcomes.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_meditation" min="0" max="100" value="75" class="w-full h-1 mt-0.5 opacity-50" oninput="updateRangeVal('meditation')">
+              </div>
+            </div>
+          </details>
+
+          <!-- Cellular Repair -->
+          <details class="bg-white border border-gray-200 rounded p-2 text-xs" open>
+            <summary class="font-semibold cursor-pointer text-gray-800 flex justify-between items-center">
+              <span>Cellular Repair</span>
+              <span id="badge_cell" class="text-[11px] text-gray-500 font-normal">1.00x</span>
+            </summary>
+            <div class="pt-2 space-y-2.5 border-t border-gray-100 mt-2">
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_cold" onchange="updateBucketState()">
+                    <span>Cold Plunge</span>
+                  </span>
+                  <span id="lbl_cold_val" class="text-gray-500">75%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Adherence
+                    <span class="tip-icon" data-tip="How often you do cold exposure. 0% = never; 100% = regular cold plunges or cold showers, which may support recovery and metabolism.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_cold" min="0" max="100" value="75" class="w-full h-1 mt-0.5 opacity-50" oninput="updateRangeVal('cold')">
+              </div>
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_redlight" onchange="updateBucketState()">
+                    <span>Red-Light Therapy</span>
+                  </span>
+                  <span id="lbl_redlight_val" class="text-gray-500">75%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Adherence
+                    <span class="tip-icon" data-tip="How often you use red-light therapy. 0% = never; 100% = regular use, which may support skin and cellular health.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_redlight" min="0" max="100" value="75" class="w-full h-1 mt-0.5 opacity-50" oninput="updateRangeVal('redlight')">
+              </div>
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_supplements" onchange="updateBucketState()">
+                    <span>Supplements</span>
+                  </span>
+                  <span id="lbl_supplements_val" class="text-gray-500">75%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Adherence
+                    <span class="tip-icon" data-tip="How consistently you take evidence-based supplements. 0% = none; 100% = daily targeted supplements. Effects are small compared to exercise and diet.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_supplements" min="0" max="100" value="75" class="w-full h-1 mt-0.5 opacity-50" oninput="updateRangeVal('supplements')">
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <hr class="border-gray-200">
+
+        <!-- Risk Factors -->
+        <div class="space-y-3">
+          <div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center">
+                <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider">Risk Factors</h3>
+                <span class="tip-icon" data-tip="Unhealthy exposures that speed up aging. Unlike healthy habits, these stack together — each one adds more risk on top of the others.">?</span>
+              </div>
+              <button onclick="openDocsDrawer('toxic-stacking')" class="text-[10px] text-blue-600 hover:text-blue-800 font-medium">Docs &rarr;</button>
+            </div>
+            <p class="text-[11px] text-gray-500">Exposures that accelerate aging (Stacking multipliers)</p>
+          </div>
+
+          <details class="bg-white border border-gray-200 rounded p-2 text-xs">
+            <summary class="font-semibold cursor-pointer text-gray-800 flex justify-between items-center">
+              <span>Toxic Exposure</span>
+              <span id="badge_chem" class="text-[11px] text-gray-500 font-normal">1.00x</span>
+            </summary>
+            <div class="pt-2 space-y-2.5 border-t border-gray-100 mt-2">
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_smoker" onchange="updateBucketState()">
+                    <span>Heavy Smoking</span>
+                  </span>
+                  <span id="lbl_smoker_val" class="text-gray-500">100%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Exposure
+                    <span class="tip-icon" data-tip="How much you smoke. 0% = non-smoker; 100% = about a pack per day. Smoking is one of the strongest risk factors in the model.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_smoker" min="0" max="100" value="100" class="w-full h-1 mt-0.5 opacity-50" oninput="updateRangeVal('smoker')">
+              </div>
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_heavyalcohol" onchange="updateBucketState()">
+                    <span>Heavy Drinking</span>
+                  </span>
+                  <span id="lbl_heavyalcohol_val" class="text-gray-500">100%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Exposure
+                    <span class="tip-icon" data-tip="How much alcohol you drink regularly. 0% = minimal or none; 100% = heavy drinking (14+ drinks per week).">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_heavyalcohol" min="0" max="100" value="100" class="w-full h-1 mt-0.5 opacity-50" oninput="updateRangeVal('heavyalcohol')">
+              </div>
+              <div>
+                <label class="flex items-center justify-between cursor-pointer">
+                  <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chk_airquality" onchange="updateBucketState()">
+                    <span>Poor Air Quality</span>
+                  </span>
+                  <span id="lbl_airquality_val" class="text-gray-500">100%</span>
+                </label>
+                <div class="flex items-center justify-between text-[10px] text-gray-400 mt-0.5">
+                  <span>Exposure
+                    <span class="tip-icon" data-tip="How polluted your everyday environment is. 0% = clean air; 100% = long-term exposure to poor air quality.">?</span>
+                  </span>
+                </div>
+                <input type="range" id="rng_airquality" min="0" max="100" value="100" class="w-full h-1 mt-0.5 opacity-50" oninput="updateRangeVal('airquality')">
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <hr class="border-gray-200">
+
+        <!-- Personal Finances -->
+        <div>
+          <div class="flex items-center mb-2">
+            <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider">Personal Finances</h3>
+            <span class="tip-icon" data-tip="Your money inputs. The model tracks how your wealth grows over time and whether you'll have enough to afford future health treatments.">?</span>
+          </div>
+          <div class="space-y-2.5 text-xs">
+            <div>
+              <label class="block text-gray-600 mb-1">
+                Starting Capital ($)
+                <span class="tip-icon" data-tip="How much money you have invested right now at your starting age.">?</span>
+              </label>
+              <input type="number" id="in_start_capital" value="10000" step="1000" class="w-full bg-white border border-gray-300 rounded px-2.5 py-1 text-xs">
+            </div>
+            <div>
+              <label class="block text-gray-600 mb-1">
+                Yearly Spending Budget ($)
+                <span class="tip-icon" data-tip="Your annual budget split between health habits and saving/investing. Higher budget means more options for future treatments.">?</span>
+              </label>
+              <input type="number" id="in_di0" value="10000" step="1000" class="w-full bg-white border border-gray-300 rounded px-2.5 py-1 text-xs">
+            </div>
+            <div>
+              <div class="flex justify-between text-gray-600 mb-1">
+                <span class="flex items-center">Portfolio Return (% per year)
+                  <span class="tip-icon" data-tip="Your expected average annual investment return after inflation. 5% is a common long-term stock market assumption.">?</span>
+                </span>
+                <span id="lbl_ret_val">5.0%</span>
+              </div>
+              <input type="range" id="rng_ret" min="0" max="150" value="50" class="w-full h-1" oninput="document.getElementById('lbl_ret_val').innerText = (this.value/10).toFixed(1)+'%'">
+            </div>
+            <div>
+              <div class="flex justify-between text-gray-600 mb-1">
+                <span class="flex items-center">Spending Growth (% per year)
+                  <span class="tip-icon" data-tip="How much your yearly income or spending budget grows over time. 3% roughly matches typical wage growth.">?</span>
+                </span>
+                <span id="lbl_inc_val">3.0%</span>
+              </div>
+              <input type="range" id="rng_income_growth" min="0" max="100" value="30" class="w-full h-1" oninput="document.getElementById('lbl_inc_val').innerText = (this.value/10).toFixed(1)+'%'">
+            </div>
+            <div>
+              <div class="flex justify-between text-gray-600 mb-1">
+                <span class="flex items-center">Healthcare Inflation (% per year)
+                  <span class="tip-icon" data-tip="How fast medical and health costs rise each year. Healthcare typically inflates faster than general goods.">?</span>
+                </span>
+                <span id="lbl_hc_val">3.0%</span>
+              </div>
+              <input type="range" id="rng_hc_infl" min="0" max="100" value="30" class="w-full h-1" oninput="document.getElementById('lbl_hc_val').innerText = (this.value/10).toFixed(1)+'%'">
+            </div>
+          </div>
+        </div>
+
+        <hr class="border-gray-200">
+
+        <!-- Scientific Discovery -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center">
+              <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider">Scientific Discovery</h3>
+              <span class="tip-icon" data-tip="Simulates future medical breakthroughs that could extend your life. Each type has a chance of arriving each year, and you need enough money to afford them when they do.">?</span>
+            </div>
+            <button onclick="openDocsDrawer('tech-discovery')" class="text-[10px] text-blue-600 hover:text-blue-800 font-medium">Docs &rarr;</button>
+          </div>
+
+          <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer mb-2">
+            <input type="checkbox" id="chk_use_tech" checked onchange="toggleTechAssumptions()">
+            <span>Simulate Future Treatments</span>
+          </label>
+
+          <div id="tech_info_box" class="bg-blue-50 border border-blue-200 rounded p-2 text-[11px] text-blue-900 leading-relaxed mb-2">
+            <strong>Simulating 3 Types of Progress:</strong><br>
+            1. <strong>Better Meds:</strong> Improved daily treatments<br>
+            2. <strong>Disease Cures:</strong> Eliminating major killers<br>
+            3. <strong>Age Reversal:</strong> Cellular repair & rejuvenation
+          </div>
+
+          <details id="tech_assumptions_drawer" class="bg-white border border-gray-200 rounded p-2 text-xs" open>
+            <summary class="font-semibold cursor-pointer text-gray-800 flex justify-between items-center">
+              <span>Assumptions</span>
+              <span class="text-[10px] text-gray-400">Configure Tiers</span>
+            </summary>
+
+            <div class="pt-2 border-t border-gray-100 mt-2 space-y-3">
+              <div class="flex border-b border-gray-200 text-[11px]">
+                <button type="button" onclick="switchTechTab('tier1')" id="tab_btn_tier1" class="tab-btn active pb-1 mr-3">Better Meds</button>
+                <button type="button" onclick="switchTechTab('tier2')" id="tab_btn_tier2" class="tab-btn pb-1 mr-3 text-gray-500">Disease Cures</button>
+                <button type="button" onclick="switchTechTab('tier3')" id="tab_btn_tier3" class="tab-btn pb-1 text-gray-500">Age Reversal</button>
+              </div>
+
+              <!-- Tier 1 -->
+              <div id="tab_pane_tier1" class="space-y-2">
+                <p class="text-[11px] text-gray-500 italic">Better versions of existing drugs (e.g., improved statins, safer weight-loss drugs, better cancer screening).</p>
+                <div>
+                  <label class="block text-gray-600 text-[11px]">Estimated Cost Today ($)
+                    <span class="tip-icon" data-tip="What this type of treatment would cost today if it existed.">?</span>
+                  </label>
+                  <input type="number" id="t1_cost" value="12000" step="1000" class="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs">
+                </div>
+                <div>
+                  <label class="block text-gray-600 text-[11px]">Years Added
+                    <span class="tip-icon" data-tip="How many extra years of life this treatment adds once available.">?</span>
+                  </label>
+                  <input type="number" id="t1_years" value="0.7" step="0.1" class="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs">
+                </div>
+                <div>
+                  <div class="flex justify-between text-gray-600 text-[11px]">
+                    <span class="flex items-center">Base Annual Prob. (%/yr)
+                      <span class="tip-icon" data-tip="The chance this breakthrough happens in any given year, starting now.">?</span>
+                    </span>
+                    <span id="lbl_t1_p0">3.0%</span>
+                  </div>
+                  <input type="range" id="rng_t1_p0" min="0" max="500" value="30" class="w-full h-1" oninput="document.getElementById('lbl_t1_p0').innerText = (this.value/10).toFixed(1)+'%'">
+                </div>
+                <div>
+                  <div class="flex justify-between text-gray-600 text-[11px]">
+                    <span class="flex items-center">Prob. Growth (per missed yr)
+                      <span class="tip-icon" data-tip="How much the odds improve each year as science advances. The longer it takes, the more likely it becomes.">?</span>
+                    </span>
+                    <span id="lbl_t1_gpp">0.15%</span>
+                  </div>
+                  <input type="range" id="rng_t1_gpp" min="0" max="500" value="15" class="w-full h-1" oninput="document.getElementById('lbl_t1_gpp').innerText = (this.value/100).toFixed(2)+'%'">
+                </div>
+                <div>
+                  <div class="flex justify-between text-gray-600 text-[11px]">
+                    <span class="flex items-center">Max Annual Prob. (%/yr)
+                      <span class="tip-icon" data-tip="The upper limit on how likely this becomes per year, no matter how long we wait.">?</span>
+                    </span>
+                    <span id="lbl_t1_cap">10.0%</span>
+                  </div>
+                  <input type="range" id="rng_t1_cap" min="0" max="1000" value="100" class="w-full h-1" oninput="document.getElementById('lbl_t1_cap').innerText = (this.value/10).toFixed(1)+'%'">
+                </div>
+              </div>
+
+              <!-- Tier 2 -->
+              <div id="tab_pane_tier2" class="space-y-2 hidden">
+                <p class="text-[11px] text-gray-500 italic">Cures for specific major diseases (e.g., Alzheimer's reversal, personalized gene therapy).</p>
+                <div>
+                  <label class="block text-gray-600 text-[11px]">Estimated Cost Today ($)
+                    <span class="tip-icon" data-tip="What this type of cure would cost today if it existed.">?</span>
+                  </label>
+                  <input type="number" id="t2_cost" value="550000" step="25000" class="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs">
+                </div>
+                <div>
+                  <label class="block text-gray-600 text-[11px]">Years Added
+                    <span class="tip-icon" data-tip="How many extra years of life this cure adds once available.">?</span>
+                  </label>
+                  <input type="number" id="t2_years" value="2.5" step="0.1" class="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs">
+                </div>
+                <div>
+                  <div class="flex justify-between text-gray-600 text-[11px]">
+                    <span class="flex items-center">Base Annual Prob. (%/yr)
+                      <span class="tip-icon" data-tip="The chance this breakthrough happens in any given year, starting now.">?</span>
+                    </span>
+                    <span id="lbl_t2_p0">0.6%</span>
+                  </div>
+                  <input type="range" id="rng_t2_p0" min="0" max="500" value="6" class="w-full h-1" oninput="document.getElementById('lbl_t2_p0').innerText = (this.value/10).toFixed(1)+'%'">
+                </div>
+                <div>
+                  <div class="flex justify-between text-gray-600 text-[11px]">
+                    <span class="flex items-center">Prob. Growth (per missed yr)
+                      <span class="tip-icon" data-tip="How much the odds improve each year as science advances.">?</span>
+                    </span>
+                    <span id="lbl_t2_gpp">0.15%</span>
+                  </div>
+                  <input type="range" id="rng_t2_gpp" min="0" max="500" value="15" class="w-full h-1" oninput="document.getElementById('lbl_t2_gpp').innerText = (this.value/100).toFixed(2)+'%'">
+                </div>
+                <div>
+                  <div class="flex justify-between text-gray-600 text-[11px]">
+                    <span class="flex items-center">Max Annual Prob. (%/yr)
+                      <span class="tip-icon" data-tip="The upper limit on how likely this becomes per year.">?</span>
+                    </span>
+                    <span id="lbl_t2_cap">10.0%</span>
+                  </div>
+                  <input type="range" id="rng_t2_cap" min="0" max="1000" value="100" class="w-full h-1" oninput="document.getElementById('lbl_t2_cap').innerText = (this.value/10).toFixed(1)+'%'">
+                </div>
+              </div>
+
+              <!-- Tier 3 -->
+              <div id="tab_pane_tier3" class="space-y-2 hidden">
+                <p class="text-[11px] text-gray-500 italic">Radical rejuvenation that slows or reverses aging itself (e.g., cellular reprogramming, organ printing).</p>
+                <div>
+                  <label class="block text-gray-600 text-[11px]">Estimated Cost Today ($)
+                    <span class="tip-icon" data-tip="What this type of treatment would cost today if it existed.">?</span>
+                  </label>
+                  <input type="number" id="t3_cost" value="2400000" step="100000" class="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs">
+                </div>
+                <div>
+                  <label class="block text-gray-600 text-[11px]">Years Added
+                    <span class="tip-icon" data-tip="How many extra years of life this treatment adds once available.">?</span>
+                  </label>
+                  <input type="number" id="t3_years" value="7.0" step="0.5" class="w-full bg-white border border-gray-300 rounded px-2 py-1 text-xs">
+                </div>
+                <div>
+                  <div class="flex justify-between text-gray-600 text-[11px]">
+                    <span class="flex items-center">Base Annual Prob. (%/yr)
+                      <span class="tip-icon" data-tip="The chance this breakthrough happens in any given year, starting now.">?</span>
+                    </span>
+                    <span id="lbl_t3_p0">0.1%</span>
+                  </div>
+                  <input type="range" id="rng_t3_p0" min="0" max="500" value="1" class="w-full h-1" oninput="document.getElementById('lbl_t3_p0').innerText = (this.value/10).toFixed(1)+'%'">
+                </div>
+                <div>
+                  <div class="flex justify-between text-gray-600 text-[11px]">
+                    <span class="flex items-center">Prob. Growth (per missed yr)
+                      <span class="tip-icon" data-tip="How much the odds improve each year as science advances.">?</span>
+                    </span>
+                    <span id="lbl_t3_gpp">0.15%</span>
+                  </div>
+                  <input type="range" id="rng_t3_gpp" min="0" max="500" value="15" class="w-full h-1" oninput="document.getElementById('lbl_t3_gpp').innerText = (this.value/100).toFixed(2)+'%'">
+                </div>
+                <div>
+                  <div class="flex justify-between text-gray-600 text-[11px]">
+                    <span class="flex items-center">Max Annual Prob. (%/yr)
+                      <span class="tip-icon" data-tip="The upper limit on how likely this becomes per year.">?</span>
+                    </span>
+                    <span id="lbl_t3_cap">10.0%</span>
+                  </div>
+                  <input type="range" id="rng_t3_cap" min="0" max="1000" value="100" class="w-full h-1" oninput="document.getElementById('lbl_t3_cap').innerText = (this.value/10).toFixed(1)+'%'">
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <hr class="border-gray-200">
+
+        <!-- Lifespan Parameters -->
+        <div>
+          <div class="flex items-center mb-2">
+            <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider">Lifespan Parameters</h3>
+            <span class="tip-icon" data-tip="Advanced settings for the math behind the mortality curve. Most users can leave these at defaults.">?</span>
+          </div>
+          <div class="space-y-2 text-xs">
+            <div>
+              <label class="block text-gray-600 mb-1">
+                Late-age Risk Plateau &lambda;
+                <span class="tip-icon" data-tip="Controls how risky very old age is. Higher values mean death risk stays higher in late life. Most users leave this at 0.6.">?</span>
+              </label>
+              <input type="number" id="in_lambda" value="0.6" step="0.05" class="w-full bg-white border border-gray-300 rounded px-2.5 py-1 text-xs">
+            </div>
+            <div>
+              <label class="block text-gray-600 mb-1">
+                Frontier Age Drift (days per year)
+                <span class="tip-icon" data-tip="How fast the maximum known human lifespan increases over time. 15 days per year means the frontier pushes out about 2 weeks each calendar year.">?</span>
+              </label>
+              <input type="number" id="in_drift" value="15.0" step="1.0" class="w-full bg-white border border-gray-300 rounded px-2.5 py-1 text-xs">
+            </div>
+          </div>
+        </div>
+
+        <hr class="border-gray-200">
+
+        <!-- Simulation -->
+        <div>
+          <div class="flex items-center mb-2">
+            <h3 class="font-bold text-gray-700 text-xs uppercase tracking-wider">Simulation</h3>
+            <span class="tip-icon" data-tip="Controls how many simulated lives to run. More runs give smoother results but take longer.">?</span>
+          </div>
+          <div class="space-y-2 text-xs">
+            <div>
+              <div class="flex justify-between text-gray-600 mb-1">
+                <span class="flex items-center">Simulation Runs
+                  <span class="tip-icon" data-tip="Number of simulated life paths. More runs = smoother results. 5,000 is a good balance of speed and accuracy.">?</span>
+                </span>
+                <span id="lbl_draws_val">5,000</span>
+              </div>
+              <input type="range" id="rng_draws" min="1000" max="20000" step="1000" value="5000" class="w-full h-1" oninput="document.getElementById('lbl_draws_val').innerText = parseInt(this.value).toLocaleString()">
+            </div>
+            <div>
+              <label class="block text-gray-600 mb-1">
+                Random Seed (reproducible)
+                <span class="tip-icon" data-tip="A starting number for the random generator. Using the same seed gives the exact same results every time, so you can compare changes fairly.">?</span>
+              </label>
+              <input type="number" id="in_seed" value="49" class="w-full bg-white border border-gray-300 rounded px-2.5 py-1 text-xs">
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="p-3 border-t border-gray-200 bg-gray-50">
+        <button onclick="runSimulation()" id="btn_run" class="w-full py-2 st-btn-run text-xs text-center transition-all cursor-pointer">Run Simulation</button>
+      </div>
+    </aside>
+
+    <!-- MAIN DASHBOARD -->
+    <main class="flex-1 overflow-y-auto custom-scroll p-6 space-y-6">
+
+      <div>
+        <h1 class="text-xl font-bold text-gray-800">Results Overview</h1>
+        <p class="text-xs text-gray-500 mt-0.5">How long you're expected to live, what you'll be worth, and where your extra years come from</p>
+      </div>
+
+      <div class="bg-gray-50 border border-gray-200 rounded px-4 py-2.5 flex items-center gap-6 text-xs">
+        <span class="font-semibold text-gray-700">Simulation View:</span>
+        <label class="inline-flex items-center gap-1.5 cursor-pointer">
+          <input type="radio" name="sim_view_mode" value="Average" checked onchange="toggleSimView('Average')">
+          <span>Average Scenario (Deterministic)</span>
+          <span class="tip-icon" data-tip="Shows your expected lifespan based on your health profile, without random luck. Good for baseline planning.">?</span>
+        </label>
+        <label class="inline-flex items-center gap-1.5 cursor-pointer">
+          <input type="radio" name="sim_view_mode" value="Range" onchange="toggleSimView('Range')">
+          <span>Range of Possibilities (Monte Carlo)</span>
+          <span class="tip-icon" data-tip="Adds random chance — good and bad health events. Shows the realistic spread of outcomes around your average.">?</span>
+        </label>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+          <div>
+            <div class="text-xs text-gray-500" id="lbl_headline_life">Projected Lifespan (Biological)</div>
+            <div class="text-2xl font-bold text-gray-800 mt-0.5" id="val_headline_life">-- years</div>
+          </div>
+          <div class="pt-2 border-t border-gray-100">
+            <div class="text-xs text-gray-500">Years remaining</div>
+            <div class="text-lg font-semibold text-gray-700 mt-0.5" id="val_years_remaining">-- years</div>
+          </div>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+          <div>
+            <div class="text-xs text-gray-500">Net worth (median, $MM)</div>
+            <div class="text-2xl font-bold text-gray-800 mt-0.5" id="val_net_worth">$--</div>
+          </div>
+          <div class="pt-2 border-t border-gray-100">
+            <div class="text-xs text-gray-500 flex items-center">Benefit from Habits
+              <span class="tip-icon" data-tip="Extra years added by your healthy habits, separate from random luck or future treatments.">?</span>
+            </div>
+            <div class="text-lg font-semibold text-green-600 mt-0.5" id="val_habit_benefit">+-- years</div>
+          </div>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+          <div>
+            <div class="text-xs text-gray-500 flex items-center">90% Confidence Range
+              <span class="tip-icon" data-tip="The range where 90% of simulated outcomes fall. 5% land below and 5% land above this range.">?</span>
+            </div>
+            <div class="text-2xl font-bold text-gray-800 mt-0.5" id="val_confidence_range">-- - -- years</div>
+          </div>
+          <div class="pt-2 border-t border-gray-100">
+            <div class="text-xs text-gray-500 flex items-center">Benefit from Treatments
+              <span class="tip-icon" data-tip="Extra years added by future medical breakthroughs, based on how likely and affordable they are.">?</span>
+            </div>
+            <div class="text-lg font-semibold text-green-600 mt-0.5" id="val_tech_benefit">+-- years</div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="border-gray-200">
+
+      <div>
+        <h2 class="text-base font-bold text-gray-800">Spending Outcomes</h2>
+        <p class="text-xs text-gray-500 mt-0.5">What your health purchases cost, how many years they buy, and what's left for your estate</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+          <div class="bg-white border border-gray-200 rounded-lg p-3.5">
+            <div class="text-xs text-gray-500">Expected treatment costs</div>
+            <div class="text-xl font-bold text-gray-800 mt-0.5" id="val_spend_total">$--</div>
+          </div>
+          <div class="bg-white border border-gray-200 rounded-lg p-3.5">
+            <div class="text-xs text-gray-500">Years gained for every $100k</div>
+            <div class="text-xl font-bold text-gray-800 mt-0.5" id="val_roi">-- yrs</div>
+          </div>
+          <div class="bg-white border border-gray-200 rounded-lg p-3.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-gray-500">Projected Ending Estate</span>
+              <span class="tip-icon" data-tip="The estimated capital remaining in your investment portfolio at the end of your lifespan, after funding routine health habits and any medical breakthroughs you adopt.">?</span>
+            </div>
+            <div class="text-xl font-bold text-gray-800 mt-0.5" id="val_bequest">$--</div>
+            <div class="text-[11px] text-gray-400 mt-0.5 font-normal" id="val_bequest_delta"></div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="border-gray-200">
+
+      <details class="bg-white border border-gray-200 rounded-lg p-4" open>
+        <summary class="font-bold text-sm text-gray-800 cursor-pointer">Impact Analysis (Forest Plot)</summary>
+        <p class="text-xs text-gray-500 mt-1 mb-2">
+          We re-run your profile setting each factor to <strong>baseline (risk &times;1.00)</strong> to measure its specific contribution. The plot below shows the Hazard Ratio (HR) and the total years added/lost by that specific habit.
+        </p>
+        <div id="forest_plot_container" class="w-full"></div>
+      </details>
+
+      <hr class="border-gray-200">
+
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-bold text-gray-800" id="hist_title">Predicted Lifespan</h2>
+          <div class="flex items-center gap-3 text-xs">
+            <span class="text-gray-500">Wealth View:</span>
+            <label class="inline-flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="wealth_view_mode" value="Scatter" checked onchange="updateCharts()">
+              <span>Scatter</span>
+            </label>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-white border border-gray-200 rounded-lg p-4 h-80"><canvas id="lifeChart"></canvas></div>
+          <div class="bg-white border border-gray-200 rounded-lg p-4 h-80"><canvas id="wealthChart"></canvas></div>
+        </div>
+      </div>
+
+      <hr class="border-gray-200">
+
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-bold text-gray-800">Added Years Breakdown</h2>
+          <select id="sel_breakdown_mode" class="bg-white border border-gray-300 rounded px-2.5 py-1 text-xs" onchange="renderBreakdownChart()">
+            <option value="habits" selected>From Health Habits</option>
+            <option value="both">From Habits + Treatments (survivors only)</option>
+            <option value="tech">From Future Treatments (survivors only)</option>
+          </select>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-lg p-4 h-72"><canvas id="yearsChart"></canvas></div>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    let rawSimData = null;
+    let currentSimView = 'Average';
+    let lifeChart = null, wealthChart = null, yearsChart = null;
+
+    const BASE_RISK_MULT = {
+      "exercise": 0.68, "steps": 0.72, "sauna": 0.77,
+      "fasting": 0.75, "mediterraneandiet": 0.77, "sugar": 0.85,
+      "sleep": 0.88, "meditation": 0.93,
+      "cold": 0.96, "redlight": 0.98, "supplements": 0.95,
+      "smoker": 2.50, "heavyalcohol": 1.35, "airquality": 1.10
+    };
+    const BUCKETS = {
+      hemo: { habits: ["exercise", "steps", "sauna"], type: "beneficial" },
+      meta: { habits: ["fasting", "mediterraneandiet", "sugar"], type: "beneficial" },
+      rest: { habits: ["sleep", "meditation"], type: "beneficial" },
+      cell: { habits: ["cold", "redlight", "supplements"], type: "beneficial" },
+      chem: { habits: ["smoker", "heavyalcohol", "airquality"], type: "harmful" }
+    };
+
+    /* ── Global Tooltip System ── */
+    const gtip = document.getElementById('gtip');
+    let gtipTimeout = null;
+
+    function showTip(el) {
+      const text = el.getAttribute('data-tip');
+      if (!text) return;
+      gtip.textContent = text;
+      gtip.classList.add('visible');
+
+      const rect = el.getBoundingClientRect();
+      const tipRect = gtip.getBoundingClientRect();
+      let left = rect.left + rect.width / 2 - tipRect.width / 2;
+      let top = rect.top - tipRect.height - 8;
+
+      // Clamp to viewport
+      if (left < 8) left = 8;
+      if (left + tipRect.width > window.innerWidth - 8) left = window.innerWidth - tipRect.width - 8;
+      if (top < 8) top = rect.bottom + 8; // Flip below if no room above
+
+      gtip.style.left = left + 'px';
+      gtip.style.top = top + 'px';
+    }
+    function hideTip() { gtip.classList.remove('visible'); }
+
+    // Delegate mouse events for all data-tip elements
+    document.addEventListener('mouseover', function(e) {
+      const el = e.target.closest('[data-tip]');
+      if (el) showTip(el);
+    });
+    document.addEventListener('mouseout', function(e) {
+      const el = e.target.closest('[data-tip]');
+      if (el) hideTip();
+    });
+    // Hide on scroll so it doesn't float in wrong spot
+    document.addEventListener('scroll', hideTip, true);
+
+    function toggleSidebar() {
+      const sb = document.getElementById('sidebar');
+      sb.classList.toggle('w-80');
+      sb.classList.toggle('w-0');
+      sb.classList.toggle('p-0');
+    }
+    function toggleTechAssumptions() {
+      const chk = document.getElementById('chk_use_tech');
+      const box = document.getElementById('tech_info_box');
+      const drawer = document.getElementById('tech_assumptions_drawer');
+      if (chk.checked) { box.classList.remove('opacity-50'); drawer.classList.remove('opacity-50'); }
+      else { box.classList.add('opacity-50'); drawer.classList.add('opacity-50'); }
+    }
+    function switchTechTab(tabId) {
+      ['tier1','tier2','tier3'].forEach(t => {
+        const btn = document.getElementById(`tab_btn_${t}`);
+        const pane = document.getElementById(`tab_pane_${t}`);
+        if (t === tabId) { btn.classList.add('active'); btn.classList.remove('text-gray-500'); pane.classList.remove('hidden'); }
+        else { btn.classList.remove('active'); btn.classList.add('text-gray-500'); pane.classList.add('hidden'); }
+      });
+    }
+    function switchBmiUnit(mode) {
+      if (mode === 'US') { document.getElementById('bmi_us_fields').classList.remove('hidden'); document.getElementById('bmi_metric_fields').classList.add('hidden'); }
+      else { document.getElementById('bmi_us_fields').classList.add('hidden'); document.getElementById('bmi_metric_fields').classList.remove('hidden'); }
+      calcBmi();
+    }
+    function calcBmi() {
+      const mode = document.querySelector('input[name="unit_mode"]:checked').value;
+      const statusBox = document.getElementById('bmi_status_box');
+      let bmi = null;
+      if (mode === 'US') {
+        const ft = parseFloat(document.getElementById('in_ft').value);
+        const inch = parseFloat(document.getElementById('in_in').value) || 0;
+        const lb = parseFloat(document.getElementById('in_lb').value);
+        if (!isNaN(ft) && !isNaN(lb) && ft > 0 && lb > 0) {
+          const h_m = (ft * 12 + inch) * 0.0254;
+          const kg = lb * 0.45359237;
+          bmi = kg / (h_m * h_m);
+        }
+      } else {
+        const cm = parseFloat(document.getElementById('in_cm').value);
+        const kg = parseFloat(document.getElementById('in_kg').value);
+        if (!isNaN(cm) && !isNaN(kg) && cm > 0 && kg > 0) {
+          const h_m = cm / 100;
+          bmi = kg / (h_m * h_m);
+        }
+      }
+      if (bmi !== null && isFinite(bmi)) {
+        statusBox.innerText = `Calculated BMI: ${bmi.toFixed(1)}`;
+        statusBox.classList.remove('text-gray-500'); statusBox.classList.add('text-gray-800');
+      } else {
+        statusBox.innerText = 'Leave blank or enter values to include BMI hazard ratio.';
+        statusBox.classList.add('text-gray-500'); statusBox.classList.remove('text-gray-800');
+      }
+      return bmi;
+    }
+    function updateRangeVal(key) {
+      const rng = document.getElementById(`rng_${key}`);
+      const lbl = document.getElementById(`lbl_${key}_val`);
+      lbl.innerText = `${rng.value}%`;
+      updateBucketState();
+    }
+    function updateBucketState() {
+      const scaling = document.getElementById('in_scaling').value;
+      for (const [bid, bdata] of Object.entries(BUCKETS)) {
+        let best_hr = 1.0, combined_hr = 1.0, any_on = false;
+        for (const h of bdata.habits) {
+          const chk = document.getElementById(`chk_${h}`);
+          const rng = document.getElementById(`rng_${h}`);
+          if (chk.checked) {
+            rng.classList.remove('opacity-50'); any_on = true;
+            const adh = parseFloat(rng.value) / 100;
+            const base_hr = BASE_RISK_MULT[h];
+            const eff = scaling === 'linear' ? (1 - adh * (1 - base_hr)) : Math.pow(base_hr, adh);
+            if (bdata.type === 'beneficial') { if (eff < best_hr) best_hr = eff; }
+            else { combined_hr *= eff; }
+          } else { rng.classList.add('opacity-50'); }
+        }
+        const badge = document.getElementById(`badge_${bid}`);
+        if (!any_on) { badge.innerText = '1.00x'; badge.className = 'text-[11px] text-gray-500 font-normal'; }
+        else if (bdata.type === 'beneficial') { badge.innerText = `${best_hr.toFixed(2)}x`; badge.className = 'text-[11px] text-green-600 font-bold'; }
+        else { badge.innerText = `${combined_hr.toFixed(2)}x`; badge.className = 'text-[11px] text-red-600 font-bold'; }
+      }
+    }
+
+    async function runSimulation() {
+      const btn = document.getElementById('btn_run');
+      btn.innerText = 'Running...'; btn.disabled = true;
+      const habitsPayload = {
+        "Frequent Exercise": { enabled: document.getElementById('chk_exercise').checked, val: parseFloat(document.getElementById('rng_exercise').value)/100 },
+        "Daily Movement": { enabled: document.getElementById('chk_steps').checked, val: parseFloat(document.getElementById('rng_steps').value)/100 },
+        "Frequent Sauna": { enabled: document.getElementById('chk_sauna').checked, val: parseFloat(document.getElementById('rng_sauna').value)/100 },
+        "Caloric Restriction": { enabled: document.getElementById('chk_fasting').checked, val: parseFloat(document.getElementById('rng_fasting').value)/100 },
+        "Mediterranean Diet": { enabled: document.getElementById('chk_mediterraneandiet').checked, val: parseFloat(document.getElementById('rng_mediterraneandiet').value)/100 },
+        "Low Sugar / Fiber": { enabled: document.getElementById('chk_sugar').checked, val: parseFloat(document.getElementById('rng_sugar').value)/100 },
+        "Consistent Sleep": { enabled: document.getElementById('chk_sleep').checked, val: parseFloat(document.getElementById('rng_sleep').value)/100 },
+        "Meditation": { enabled: document.getElementById('chk_meditation').checked, val: parseFloat(document.getElementById('rng_meditation').value)/100 },
+        "Cold Plunge": { enabled: document.getElementById('chk_cold').checked, val: parseFloat(document.getElementById('rng_cold').value)/100 },
+        "Red-Light Therapy": { enabled: document.getElementById('chk_redlight').checked, val: parseFloat(document.getElementById('rng_redlight').value)/100 },
+        "Supplements": { enabled: document.getElementById('chk_supplements').checked, val: parseFloat(document.getElementById('rng_supplements').value)/100 },
+        "Heavy Smoking": { enabled: document.getElementById('chk_smoker').checked, val: parseFloat(document.getElementById('rng_smoker').value)/100 },
+        "Heavy Drinking": { enabled: document.getElementById('chk_heavyalcohol').checked, val: parseFloat(document.getElementById('rng_heavyalcohol').value)/100 },
+        "Poor Air Quality": { enabled: document.getElementById('chk_airquality').checked, val: parseFloat(document.getElementById('rng_airquality').value)/100 },
+      };
+      const payload = {
+        age: parseInt(document.getElementById('in_age').value),
+        sex: document.getElementById('in_sex').value,
+        bmi: calcBmi(),
+        scaling_mode: document.getElementById('in_scaling').value,
+        habits: habitsPayload,
+        start_capital: parseFloat(document.getElementById('in_start_capital').value),
+        di0: parseFloat(document.getElementById('in_di0').value),
+        ret: parseFloat(document.getElementById('rng_ret').value) / 1000,
+        income_growth: parseFloat(document.getElementById('rng_income_growth').value) / 1000,
+        hc_infl: parseFloat(document.getElementById('rng_hc_infl').value) / 1000,
+        use_tech: document.getElementById('chk_use_tech').checked,
+        tier1: { cost: parseFloat(document.getElementById('t1_cost').value), years: parseFloat(document.getElementById('t1_years').value), p0: parseFloat(document.getElementById('rng_t1_p0').value)/1000, g_pp: parseFloat(document.getElementById('rng_t1_gpp').value)/10000, cap: parseFloat(document.getElementById('rng_t1_cap').value)/1000 },
+        tier2: { cost: parseFloat(document.getElementById('t2_cost').value), years: parseFloat(document.getElementById('t2_years').value), p0: parseFloat(document.getElementById('rng_t2_p0').value)/1000, g_pp: parseFloat(document.getElementById('rng_t2_gpp').value)/10000, cap: parseFloat(document.getElementById('rng_t2_cap').value)/1000 },
+        tier3: { cost: parseFloat(document.getElementById('t3_cost').value), years: parseFloat(document.getElementById('t3_years').value), p0: parseFloat(document.getElementById('rng_t3_p0').value)/1000, g_pp: parseFloat(document.getElementById('rng_t3_gpp').value)/10000, cap: parseFloat(document.getElementById('rng_t3_cap').value)/1000 },
+        lambda_plateau: parseFloat(document.getElementById('in_lambda').value),
+        drift_days: parseFloat(document.getElementById('in_drift').value),
+        draws: parseInt(document.getElementById('rng_draws').value),
+        seed: parseInt(document.getElementById('in_seed').value)
+      };
+      try {
+        const res = await fetch('/api/simulate_full', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Server returned HTTP ${res.status}: ${errText}`);
+        }
+        rawSimData = await res.json();
+        renderResults();
+      } catch (err) {
+        console.error('Simulation run failed:', err);
+        alert('Simulation failed to run. Please check that the backend server is running.\n\nError: ' + err.message);
+      }
+      finally { btn.innerText = 'Run Simulation'; btn.disabled = false; }
+    }
+    function toggleSimView(mode) { currentSimView = mode; renderResults(); }
+    function renderResults() {
+      if (!rawSimData) return;
+      const m = rawSimData.metrics;
+      if (currentSimView === 'Range') {
+        document.getElementById('lbl_headline_life').innerText = 'Simulated Lifespan (Median outcome)';
+        document.getElementById('val_headline_life').innerText = `${m.mc_lifespan} years`;
+        document.getElementById('val_years_remaining').innerText = `${m.mc_years_remaining} years`;
+        document.getElementById('hist_title').innerText = 'Simulated Ages at Death';
+      } else {
+        document.getElementById('lbl_headline_life').innerText = 'Projected Lifespan (Biological)';
+        document.getElementById('val_headline_life').innerText = `${m.det_lifespan} years`;
+        document.getElementById('val_years_remaining').innerText = `${m.det_years_remaining} years`;
+        document.getElementById('hist_title').innerText = 'Predicted Lifespan';
+      }
+      document.getElementById('val_net_worth').innerText = `${m.median_net_worth_mm.toFixed(2)}`;
+      document.getElementById('val_habit_benefit').innerText = `+${m.benefit_from_habits} years`;
+      document.getElementById('val_confidence_range').innerText = `${m.conf_90_p5} - ${m.conf_90_p95} years`;
+      document.getElementById('val_tech_benefit').innerText = `+${m.benefit_from_treatments} years`;
+      document.getElementById('val_spend_total').innerText = `$${m.expected_treatment_costs.toLocaleString()}`;
+      document.getElementById('val_roi').innerText = `${m.years_per_100k.toFixed(2)} yrs`;
+      
+      const estateVal = m.terminal_estate != null ? m.terminal_estate : (m.median_net_worth_mm * 1e6);
+      document.getElementById('val_bequest').innerText = `$${Math.round(estateVal).toLocaleString()}`;
+      
+      const deltaEl = document.getElementById('val_bequest_delta');
+      if (deltaEl) {
+        if (m.bequest_delta != null && Math.abs(m.bequest_delta) > 0) {
+          const sign = m.bequest_delta >= 0 ? '+' : '-';
+          deltaEl.innerText = `${sign}$${Math.abs(Math.round(m.bequest_delta)).toLocaleString()} vs. without tech`;
+        } else {
+          deltaEl.innerText = '';
+        }
+      }
+
+      renderForestPlot(rawSimData.forest_plot);
+      updateCharts();
+      renderBreakdownChart();
+    }
+    function renderForestPlot(rows) {
+      const container = document.getElementById('forest_plot_container');
+      if (!rows || rows.length === 0) { Plotly.purge(container); container.innerHTML = '<div class="text-xs text-gray-400 italic py-2">No active factors to analyze yet</div>'; return; }
+      container.innerHTML = '';
+      const yLabels = rows.map(r => r.factor);
+      const xValues = rows.map(r => r.hr);
+      const colors = rows.map(r => r.is_harmful ? '#ff4b4b' : '#09ab3b');
+      const hoverTexts = rows.map(r => `HR: ${r.hr.toFixed(2)}<br>Impact: ${r.delta >= 0 ? '+' : ''}${r.delta.toFixed(1)} years`);
+      const trace = { x: xValues, y: yLabels, mode: 'markers', marker: { color: colors, size: 11, line: { width: 1.5, color: '#333333' } }, text: hoverTexts, hoverinfo: 'text+y', type: 'scatter' };
+      const layout = {
+        title: { text: 'Risk Factor Impact (Hazard Ratios)', font: { size: 14, color: '#333333', family: 'Arial' }, x: 0, xanchor: 'left' },
+        xaxis: { title: { text: 'Hazard Ratio (Log Scale)', font: { size: 11, family: 'Arial' } }, type: 'log', tickvals: [0.5, 0.75, 1.0, 1.5, 2.0, 3.0], ticktext: ['0.5x', '0.75x', '1.0x (Neutral)', '1.5x', '2.0x', '3.0x'], range: [Math.log10(0.4), Math.log10(3.5)], gridcolor: '#e5e7eb', zeroline: false },
+        yaxis: { title: '', type: 'category', automargin: true, tickfont: { size: 12, family: 'Arial' } },
+        shapes: [{ type: 'line', x0: 1.0, x1: 1.0, y0: 0, y1: 1, yref: 'paper', line: { color: '#555555', width: 1.5, dash: 'dash' } }],
+        height: Math.max(260, 80 + rows.length * 36), margin: { l: 150, r: 30, t: 40, b: 40 }, showlegend: false, paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff'
+      };
+      Plotly.newPlot(container, [trace], layout, { responsive: true, displayModeBar: false });
+    }
+    function updateCharts() {
+      if (!rawSimData) return;
+      const histData = currentSimView === 'Range' ? rawSimData.histograms.mc : rawSimData.histograms.det;
+      const ctxLife = document.getElementById('lifeChart').getContext('2d');
+      if (lifeChart) lifeChart.destroy();
+      lifeChart = new Chart(ctxLife, { type: 'bar', data: { labels: histData.bins, datasets: [{ label: 'Simulations', data: histData.counts, backgroundColor: '#1f77b4', borderRadius: 2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Age at death (years)', font: { size: 11 } } }, y: { title: { display: true, text: 'Simulations', font: { size: 11 } } } } } });
+      const scatterPoints = rawSimData.wealth_scatter.map(p => ({ x: currentSimView === 'Range' ? p.life_mc : p.life, y: p.nw }));
+      const ctxWealth = document.getElementById('wealthChart').getContext('2d');
+      if (wealthChart) wealthChart.destroy();
+      wealthChart = new Chart(ctxWealth, { type: 'scatter', data: { datasets: [{ label: 'Wealth Outcomes', data: scatterPoints, backgroundColor: 'rgba(31, 119, 180, 0.45)', borderColor: '#1f77b4', pointRadius: 2.5 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Age at death (years)', font: { size: 11 } } }, y: { title: { display: true, text: 'Net worth at death ($MM)', font: { size: 11 } } } } } });
+    }
+    function renderBreakdownChart() {
+      if (!rawSimData) return;
+      const mode = document.getElementById('sel_breakdown_mode').value;
+      const t = rawSimData.timeline;
+      let yValues = mode === 'habits' ? t.habits_years : mode === 'tech' ? t.tech_years : t.habits_years.map((v, i) => v + t.tech_years[i]);
+      const ctxYears = document.getElementById('yearsChart').getContext('2d');
+      if (yearsChart) yearsChart.destroy();
+      yearsChart = new Chart(ctxYears, { type: 'line', data: { labels: t.chrono_age, datasets: [{ label: 'Years Added', data: yValues, fill: true, backgroundColor: 'rgba(31, 119, 180, 0.25)', borderColor: '#1f77b4', borderWidth: 1.5, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Age', font: { size: 11 } } }, y: { title: { display: true, text: 'Years Added by Age', font: { size: 11 } } } } } });
+    }
+
+    function openDocsDrawer(sectionId) {
+      const drawer = document.getElementById('docs_drawer');
+      const backdrop = document.getElementById('docs_backdrop');
+      const iframe = document.getElementById('docs_iframe');
+      
+      const targetUrl = sectionId ? ('/docs#' + sectionId) : '/docs';
+      if (iframe.src === 'about:blank' || !iframe.src.includes('/docs')) {
+        iframe.src = targetUrl;
+      } else if (sectionId) {
+        iframe.contentWindow.location.hash = sectionId;
+        // Trigger center scrolling inside the iframe
+        try {
+          if (typeof iframe.contentWindow.scrollToSection === 'function') {
+            iframe.contentWindow.scrollToSection(sectionId);
+          }
+        } catch (e) {}
+      }
+
+      backdrop.classList.remove('hidden');
+      setTimeout(() => {
+        backdrop.classList.remove('opacity-0');
+        drawer.classList.remove('translate-x-full');
+        // Give iframe a moment to render and ensure centered view
+        if (sectionId) {
+          setTimeout(() => {
+            try {
+              if (typeof iframe.contentWindow.scrollToSection === 'function') {
+                iframe.contentWindow.scrollToSection(sectionId);
+              }
+            } catch (e) {}
+          }, 250);
+        }
+      }, 10);
+    }
+
+    function closeDocsDrawer() {
+      const drawer = document.getElementById('docs_drawer');
+      const backdrop = document.getElementById('docs_backdrop');
+      drawer.classList.add('translate-x-full');
+      backdrop.classList.add('opacity-0');
+      setTimeout(() => {
+        backdrop.classList.add('hidden');
+      }, 300);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      updateBucketState();
+      runSimulation();
+
+      // Listen for Enter key on any input in the sidebar to run simulation
+      const sidebarEl = document.getElementById('sidebar');
+      if (sidebarEl) {
+        sidebarEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            // Prevent accidental form submits or default triggers
+            e.preventDefault();
+            // Blur active element to commit any onblur/onchange handlers
+            if (document.activeElement && typeof document.activeElement.blur === 'function') {
+              document.activeElement.blur();
+            }
+            runSimulation();
+          }
+        });
+      }
+    });
+  </script>
+
+  <!-- IN-APP METHODOLOGY SLIDE-OVER DRAWER -->
+  <div id="docs_backdrop" class="fixed inset-0 bg-black/30 z-50 backdrop-blur-sm hidden transition-opacity opacity-0" onclick="closeDocsDrawer()"></div>
+  <aside id="docs_drawer" class="fixed top-0 right-0 h-full w-full sm:w-[580px] bg-white z-50 shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300 ease-in-out border-l border-gray-200">
+    <!-- Drawer Header -->
+    <div class="px-5 py-3.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-2">
+        <div class="w-2 h-2 rounded-full bg-blue-600"></div>
+        <h2 class="font-bold text-sm text-gray-800">Methodology & Technical Spec</h2>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="/docs" target="_blank" class="text-xs text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 transition flex items-center gap-1">
+          <span>Full Page</span>
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+        </a>
+        <button onclick="closeDocsDrawer()" class="text-gray-400 hover:text-gray-700 p-1 rounded-full hover:bg-gray-200">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+    </div>
+    <!-- Drawer Iframe embed -->
+    <div class="flex-1 overflow-hidden relative bg-gray-50">
+      <iframe id="docs_iframe" src="about:blank" class="w-full h-full border-0"></iframe>
+    </div>
+  </aside>
+
+</body>
+</html>
