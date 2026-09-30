@@ -1334,8 +1334,13 @@
 
           if (data.session) {
             setAuthenticatedState(data.session);
+          } else if (data.user && data.user.identities && data.user.identities.length === 0) {
+            // Account already exists — Supabase returns empty identities to prevent enumeration
+            errBox.innerText = "An account with this email already exists. Switch to Sign In and use your existing password.";
+            errBox.classList.remove('hidden');
+            setTimeout(() => switchAuthTab('signin'), 1500);
           } else {
-            succBox.innerText = "Account created! If email confirmation is required, please check your inbox to confirm.";
+            succBox.innerText = "Account created. Check your inbox for a confirmation email to activate your account.";
             succBox.classList.remove('hidden');
           }
         } else {
