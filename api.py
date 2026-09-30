@@ -1,24 +1,30 @@
 from __future__ import annotations
-import math, os
+import math, os, urllib.request, json
 from typing import Dict, List, Optional, Any
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 import numpy as np
+from sqlalchemy import or_
+from sqlalchemy.orm import defer
 
 import engine
 from engine import Inputs, Tier, IntervCost
 import storage
+from storage import Session, Org, User, Client, Run
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://povsczqljpbvermijxrh.supabase.co")
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "sb_publishable_j-YL3zOHlJhPvNSsa1lAtw_22wMlTnt")
+
 app = FastAPI(
-    title="Time Utility Model API",
-    description="Actuarial Longevity & Time Capital Simulation Engine",
+    title="Hazard Curve API",
+    description="Longevity & Wealth Planning Simulation Engine",
     version="2.0.0",
     docs_url=None,
     redoc_url=None
@@ -501,6 +507,171 @@ def simulate_full(req: FullSimulationRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+def get_current_user_and_org(authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication token required")
+    
+    token = authorization.split("Bearer ", 1)[1].strip()
+    try:
+        req = urllib.request.Request(
+            f"{SUPABASE_URL}/auth/v1/user",
+            headers={
+                "apikey": SUPABASE_ANON_KEY,
+                "Authorization": f"Bearer {token}"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            sb_user = json.loads(resp.read().decode())
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid or expired session. Please sign in again.")
+
+    user_id = sb_user.get("id")
+    email = sb_user.get("email") or ""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid user session")
+
+    # Mirror to Postgres User & Org if first time (exactly matching Admin.py)
+    sess = Session()
+    try:
+        u = sess.get(User, user_id)
+        if not u:
+            org_name = f"{email.split('@')[0]}'s Firm" if email else "Advisor Practice"
+            org = Org(name=org_name)
+            sess.add(org)
+            sess.flush()
+            u = User(id=user_id, email=email, org_id=org.id)
+            sess.add(u)
+            sess.commit()
+        return {"user_id": u.id, "email": u.email, "org_id": u.org_id}
+    finally:
+        sess.close()
+
+class SaveRunRequest(BaseModel):
+    client_name: str
+    client_email: Optional[str] = ""
+    client_id: Optional[str] = None
+    inputs: Dict[str, Any]
+    metrics: Dict[str, Any]
+    timeline: Optional[Dict[str, Any]] = None
+    bucket_summaries: Optional[Dict[str, Any]] = None
+
+@app.get("/api/auth/me")
+def auth_me(auth: dict = Depends(get_current_user_and_org)):
+    return {
+        "status": "authenticated",
+        "user_id": auth["user_id"],
+        "email": auth["email"],
+        "org_id": auth["org_id"]
+    }
+
+@app.get("/api/runs")
+def list_runs(search: Optional[str] = None, auth: dict = Depends(get_current_user_and_org)):
+    sess = Session()
+    try:
+        org_id = auth["org_id"]
+        q = (sess.query(Run, Client)
+             .options(defer(Run.inputs), defer(Run.outputs))
+             .join(Client, Run.client_id == Client.id, isouter=True)
+             .filter(Run.org_id == org_id))
+
+        if search:
+            like = f"%{search.strip()}%"
+            q = q.filter(or_(Client.name.ilike(like), Client.email.ilike(like), Run.id.ilike(like)))
+
+        rows = q.order_by(Run.created_at.desc()).limit(30).all()
+        res = []
+        for r, c in rows:
+            res.append({
+                "id": r.id,
+                "client_id": r.client_id,
+                "client_name": c.name if c else "Unknown",
+                "client_email": c.email if c else "",
+                "created_at": r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else ""
+            })
+        return {"runs": res}
+    finally:
+        sess.close()
+
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: str, auth: dict = Depends(get_current_user_and_org)):
+    sess = Session()
+    try:
+        r = sess.query(Run).filter(Run.id == run_id, Run.org_id == auth["org_id"]).first()
+        if not r:
+            raise HTTPException(status_code=404, detail="Run not found")
+        client = sess.get(Client, r.client_id)
+        return {
+            "id": r.id,
+            "client_name": client.name if client else "Unknown",
+            "client_email": client.email if client else "",
+            "created_at": r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "",
+            "inputs": r.inputs,
+            "outputs": r.outputs
+        }
+    finally:
+        sess.close()
+
+@app.post("/api/runs")
+def save_run(payload: SaveRunRequest, auth: dict = Depends(get_current_user_and_org)):
+    sess = Session()
+    try:
+        org_id = auth["org_id"]
+        user_id = auth["user_id"]
+        
+        # Resolve or create Client
+        if payload.client_id:
+            client = sess.query(Client).filter(Client.id == payload.client_id, Client.org_id == org_id).first()
+            if not client:
+                client = Client(org_id=org_id, name=payload.client_name.strip(), email=(payload.client_email or "").strip())
+                sess.add(client)
+                sess.flush()
+        else:
+            if not payload.client_name.strip():
+                raise HTTPException(status_code=400, detail="Client name is required")
+            client = Client(org_id=org_id, name=payload.client_name.strip(), email=(payload.client_email or "").strip())
+            sess.add(client)
+            sess.flush()
+
+        # Package outputs
+        outputs_payload = {
+            "summary": payload.metrics,
+            "timeline": payload.timeline or {},
+            "bucket_summaries": payload.bucket_summaries or {}
+        }
+
+        run = Run(
+            org_id=org_id,
+            operator_id=user_id,
+            client_id=client.id,
+            inputs=payload.inputs,
+            outputs=outputs_payload
+        )
+        sess.add(run)
+        sess.commit()
+
+        return {
+            "status": "success",
+            "run_id": run.id,
+            "client_id": client.id,
+            "client_name": client.name,
+            "created_at": run.created_at.strftime("%Y-%m-%d %H:%M") if run.created_at else ""
+        }
+    finally:
+        sess.close()
+
+@app.delete("/api/runs/{run_id}")
+def delete_run(run_id: str, auth: dict = Depends(get_current_user_and_org)):
+    sess = Session()
+    try:
+        r = sess.query(Run).filter(Run.id == run_id, Run.org_id == auth["org_id"]).first()
+        if not r:
+            raise HTTPException(status_code=404, detail="Run not found")
+        sess.delete(r)
+        sess.commit()
+        return {"status": "success", "deleted_id": run_id}
+    finally:
+        sess.close()
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
