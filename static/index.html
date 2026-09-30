@@ -1245,8 +1245,15 @@
     let cachedSavedRuns = [];
 
     function initSupabase() {
-      if (window.supabase && typeof window.supabase.createClient === 'function') {
+      if (window.supabase && typeof window.supabase.createClient === 'function' && !sbClient) {
         sbClient = window.supabase.createClient(SB_URL, SB_KEY);
+        sbClient.auth.onAuthStateChange((event, session) => {
+          if (session) {
+            setAuthenticatedState(session);
+          } else if (event === 'SIGNED_OUT') {
+            showAuthModal();
+          }
+        });
       }
     }
 
@@ -1329,7 +1336,13 @@
           if (password !== confirmPassword) {
             throw new Error("Passwords do not match");
           }
-          const { data, error } = await sbClient.auth.signUp({ email, password });
+          const { data, error } = await sbClient.auth.signUp({
+            email,
+            password,
+            options: {
+              emailRedirectTo: window.location.origin
+            }
+          });
           if (error) throw error;
 
           if (data.session) {
