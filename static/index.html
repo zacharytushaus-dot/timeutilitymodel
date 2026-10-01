@@ -1494,7 +1494,7 @@
             document.getElementById('rng_ret').value = Math.round(inp.ret * 1000);
             document.getElementById('lbl_ret_val').innerText = (inp.ret * 100).toFixed(1) + '%';
           }
-          if (inp.start_capital != null) document.getElementById('in_start_cap').value = inp.start_capital;
+          if (inp.start_capital != null) document.getElementById('in_start_capital').value = inp.start_capital;
           if (inp.di0 != null) document.getElementById('in_di0').value = inp.di0;
         }
 
@@ -1556,7 +1556,7 @@
             age: parseInt(document.getElementById('in_age').value),
             sex: document.getElementById('in_sex').value,
             ret: parseFloat(document.getElementById('rng_ret').value) / 1000,
-            start_capital: parseFloat(document.getElementById('in_start_cap').value),
+            start_capital: parseFloat(document.getElementById('in_start_capital').value),
             di0: parseFloat(document.getElementById('in_di0').value),
             seed: parseInt(document.getElementById('in_seed').value) || 49
           },
