@@ -38,6 +38,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def on_startup():
+    try:
+        storage.ensure_tables()
+    except Exception as e:
+        print(f"Warning: ensure_tables() failed on startup: {e}")
+
 # Standard habit base hazard ratios from Admin.py
 BASE_RISK_MULT: Dict[str, float] = {
     # Hemodynamic
@@ -535,6 +542,14 @@ def get_current_user_and_org(authorization: Optional[str] = Header(None)):
     sess = Session()
     try:
         u = sess.get(User, user_id)
+        if not u and email:
+            # Check if user with this email already exists under another id (e.g. auth provider change)
+            u = sess.query(User).filter(User.email == email).first()
+            if u:
+                # Update user id to match current supabase id if needed
+                if u.id != user_id:
+                    u.id = user_id
+                    sess.commit()
         if not u:
             org_name = f"{email.split('@')[0]}'s Firm" if email else "Advisor Practice"
             org = Org(name=org_name)
@@ -544,6 +559,11 @@ def get_current_user_and_org(authorization: Optional[str] = Header(None)):
             sess.add(u)
             sess.commit()
         return {"user_id": u.id, "email": u.email, "org_id": u.org_id}
+    except Exception as e:
+        sess.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"User provisioning error: {str(e)}")
     finally:
         sess.close()
 
@@ -620,16 +640,19 @@ def save_run(payload: SaveRunRequest, auth: dict = Depends(get_current_user_and_
         user_id = auth["user_id"]
         
         # Resolve or create Client
+        client_name = (payload.client_name or "").strip()
+        client_email = (payload.client_email or "").strip()
+        
         if payload.client_id:
             client = sess.query(Client).filter(Client.id == payload.client_id, Client.org_id == org_id).first()
             if not client:
-                client = Client(org_id=org_id, name=payload.client_name.strip(), email=(payload.client_email or "").strip())
+                client = Client(org_id=org_id, name=client_name or "Client", email=client_email)
                 sess.add(client)
                 sess.flush()
         else:
-            if not payload.client_name.strip():
+            if not client_name:
                 raise HTTPException(status_code=400, detail="Client name is required")
-            client = Client(org_id=org_id, name=payload.client_name.strip(), email=(payload.client_email or "").strip())
+            client = Client(org_id=org_id, name=client_name, email=client_email)
             sess.add(client)
             sess.flush()
 
@@ -657,6 +680,14 @@ def save_run(payload: SaveRunRequest, auth: dict = Depends(get_current_user_and_
             "client_name": client.name,
             "created_at": run.created_at.strftime("%Y-%m-%d %H:%M") if run.created_at else ""
         }
+    except HTTPException:
+        sess.rollback()
+        raise
+    except Exception as e:
+        sess.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Database error saving run: {str(e)}")
     finally:
         sess.close()
 
@@ -670,6 +701,14 @@ def delete_run(run_id: str, auth: dict = Depends(get_current_user_and_org)):
         sess.delete(r)
         sess.commit()
         return {"status": "success", "deleted_id": run_id}
+    except HTTPException:
+        sess.rollback()
+        raise
+    except Exception as e:
+        sess.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Database error deleting run: {str(e)}")
     finally:
         sess.close()
 
